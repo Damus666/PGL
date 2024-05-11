@@ -168,7 +168,7 @@ class Frame:
 
 class Window:
     pixel_rect: Rect
-    center: Rect
+    center: Vec
     size: Vec
     title: str
     resizable: bool

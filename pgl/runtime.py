@@ -37,6 +37,13 @@ TEXTPOS_MIDB = "ml"
 ALIGN_CENTER = "center"
 ALIGN_LEFT = "left"
 ALIGN_RIGHT = "right"
+NOISE_LT = "lt"
+NOISE_GT = "gt"
+NOISE_SIMPLEX_2D = "simplex2D"
+NOISE_SIMPLEX_3D = "simplex3D"
+NOISE_PERLIN_1D = "perlin1D"
+NOISE_PERLIN_2D = "perlin2D"
+NOISE_PERLIN_3D = "perlin3D"
 
 
 class _internal:
@@ -65,6 +72,7 @@ class _internal:
     _light_filter = None
     _lights = []
     _fonts_data = {}
+    _noise = None
     _atlas = {
         "ID": 0,
         "surfaces": {},
@@ -284,6 +292,8 @@ void main() {
         pygame.display.set_mode(size, pygame.OPENGL | pygame.DOUBLEBUF | extra)
         if "window" in config and "title" in config["window"]:
             pygame.display.set_caption(config["window"]["title"])
+        else:
+            pygame.display.set_caption("PGL Window")
 
         _internal._gl_context = _mgl.create_context()
         _internal._gl_context.enable(_mgl.BLEND)
@@ -330,9 +340,11 @@ void main() {
             if "framerate-limit" in config["game"] and config["game"]["framerate-limit"] != "unlimited":
                 Time.fps_limit = max(0, config["game"]["framerate-limit"])
             if "max-lights" in config["game"]:
+                if not isinstance(config["game"]["max-lights"], int):
+                    raise RuntimeError("Max lights value must be an integer")
                 _internal._max_lights = max(0, config["game"]["max-lights"])
-                if _internal._max_lights > 120:
-                    raise RuntimeError(f"Max lights value must be <= 120")
+                if _internal._max_lights > 145:
+                    raise RuntimeError(f"Max lights value must be <= 145")
             if "ambient-light" in config["game"]:
                 _internal._ambient_light = config["game"]["ambient-light"]
 
@@ -489,6 +501,8 @@ void main() {
 
         while True:
             _internal._update_main()
+            if len(_internal._scene.clear_color) != 4:
+                raise RuntimeError(f"Scene clear color must have 4 components")
             _internal._gl_context.clear(*_internal._scene.clear_color)
 
             for event in Frame.events:
@@ -653,6 +667,8 @@ void main() {
                 extra |= pygame.RESIZABLE
             if _internal._borderless:
                 extra |= pygame.NOFRAME
+            if v == "maximized":
+                v = pygame.display.get_desktop_sizes()[0]
             pygame.display.set_mode(
                 v, pygame.OPENGL | pygame.DOUBLEBUF | extra)
 
@@ -1012,8 +1028,7 @@ class Font:
         all_chars = []
         for char in text:
             if not f"{font_name}_{char}" in _internal._font_atlas["uvs"]:
-                raise RuntimeError(f"Character '{char}' of font '{
-                                   font_name}' was not registered")
+                raise RuntimeError(f"Character '{char}' of font '{font_name}' was not registered")
             cw = data["chars_w"][char]*scale
             all_chars.append([char, x, y, cw])
             x += cw
@@ -1032,8 +1047,7 @@ class Font:
         all_chars = []
         for char in text:
             if not f"{font_name}_{char}" in _internal._font_atlas["uvs"]:
-                raise RuntimeError(f"Character '{char}' of font '{
-                                   font_name}' was not registered")
+                raise RuntimeError(f"Character '{char}' of font '{font_name}' was not registered")
             cw = data["chars_w"][char]*scale
             all_chars.append([char, x, y, cw])
             x += cw
@@ -1053,8 +1067,7 @@ class Font:
         chars, lines, all_chars = [], [], []
         for char in text:
             if char != "\n" and not f"{font_name}_{char}" in _internal._font_atlas["uvs"]:
-                raise RuntimeError(f"Character '{char}' of font '{
-                                   font_name}' was not registered")
+                raise RuntimeError(f"Character '{char}' of font '{font_name}' was not registered")
             cw = data["chars_w"].get(char, 0)*scale
             if char == "\n" or (x + cw > max_width and max_width > 0):
                 if (not words_intact and char != " ") or char == "\n":
@@ -1229,6 +1242,48 @@ class Timer:
     @property
     def active(self):
         return self.start_time != -1
+
+
+class NoiseSettings:
+    def __init__(self, octaves=2, scale=0.08, activation = -0.5, activation_dir=NOISE_LT, type=NOISE_PERLIN_2D, seed=None, user_data=None, persistence=0.5, lacunarity=2):
+        if _internal._noise is None:
+            try:
+                import noise
+                _internal._noise = noise
+            except ModuleNotFoundError:
+                raise RuntimeError(f"To use the NoiseSettings utility you need to install the noise module")
+        if seed is None:
+            seed = random.randint(0, 9999)
+        self.octaves, self.scale, self.activation, self.activation_dir, self.seed, \
+            self.user_data, self.type, self.persistence, self.lacunarity = (octaves, scale, activation, 
+                                        activation_dir, seed, user_data, type, persistence, lacunarity)
+        
+    def get(self, coordinate, scale_mul=1):
+        if self.type == NOISE_SIMPLEX_2D:
+            return _internal._noise.snoise2(coordinate*self.scale*scale_mul+self.seed, coordinate[1]*self.scale*scale_mul+self.seed,
+                                            self.octaves, self.persistence, self.lacunarity)
+        elif self.type == NOISE_SIMPLEX_3D:
+            return _internal._noise.snoise3(coordinate[0]*self.scale*scale_mul+self.seed, coordinate[1]*self.scale*scale_mul+self.seed,
+                                            coordinate[2]*self.scale*scale_mul+self.seed, self.octaves, self.persistence, self.lacunarity)
+        elif self.type == NOISE_PERLIN_1D:
+            return _internal._noise.pnoise1(coordinate*self.scale*scale_mul+self.seed, self.octaves, self.persistence, self.lacunarity)
+        elif self.type == NOISE_PERLIN_2D:
+            return _internal._noise.pnoise2(coordinate[0]*self.scale*scale_mul+self.seed, coordinate[1]*self.scale*scale_mul+self.seed,
+                                            self.octaves, self.persistence, self.lacunarity)
+        elif self.type == NOISE_PERLIN_3D:
+            return _internal._noise.pnoise3(coordinate[0]*self.scale*scale_mul+self.seed, coordinate[1]*self.scale*scale_mul+self.seed,
+                                            coordinate[2]*self.scale*scale_mul+self.seed, self.octaves, self.persistence, self.lacunarity)
+        else:
+            raise RuntimeError(f"Noise type '{self.type}' is not supported")
+        
+    def check(self, coordinate, scale_mul=1):
+        value = self.get(coordinate, scale_mul)
+        if self.activation_dir == NOISE_LT:
+            return value <= self.activation
+        elif self.activation_dir == NOISE_GT:
+            return value >= self.activation
+        else:
+            raise RuntimeError(f"Activation direction '{self.activation_dir}' is not supported")
 
 
 class Scene:
@@ -1428,7 +1483,7 @@ class Entity:
 
     @property
     def tags(self):
-        return self._meta_["tags"]
+        return tuple(self._meta_["tags"])
 
     @property
     def position(self):
@@ -1507,6 +1562,10 @@ class Entity:
     @property
     def rect(self):
         return self._meta_["rect"].copy()
+    
+    @rect.setter
+    def rect(self, v):
+        self._meta_["rect"] = v.copy()
 
     @property
     def containers(self):
@@ -1514,7 +1573,7 @@ class Entity:
 
     @property
     def forward(self):
-        return Vec(0, 1).rotate(self._meta_["angle"])
+        return Vec(0, -1).rotate(self._meta_["angle"])
 
     def __str__(self):
         return f"{self.__class__.__name__}(tags={self.tags})"
@@ -1595,6 +1654,9 @@ def light_filter(func):
     return func
 
 
-def from_pg_color(color):
+def from_pg_color(color, alpha=True):
     color = pygame.Color(color)
-    return (color.r/255, color.g/255, color.b/255, color.a/255)
+    if alpha:
+        return (color.r/255, color.g/255, color.b/255, color.a/255)
+    else:
+        return (color.r/255, color.g/255, color.b/255)
