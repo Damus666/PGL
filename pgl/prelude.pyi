@@ -37,6 +37,13 @@ TEXTPOS_MIDB = "ml"
 ALIGN_CENTER = "center"
 ALIGN_LEFT = "left"
 ALIGN_RIGHT = "right"
+NOISE_LT = "lt"
+NOISE_GT = "gt"
+NOISE_SIMPLEX_2D = "simplex2D"
+NOISE_SIMPLEX_3D = "simplex3D"
+NOISE_PERLIN_1D = "perlin1D"
+NOISE_PERLIN_2D = "perlin2D"
+NOISE_PERLIN_3D = "perlin3D"
 
 
 class Entity:
@@ -122,6 +129,8 @@ class Scene:
     def get(self) -> "Scene": ...
     @staticmethod
     def load(name: str) -> "Scene": ...
+    def __str__(self) -> str: ...
+    def __repr__(self) -> str: ...
 
 
 class Time:
@@ -154,10 +163,30 @@ class Timer:
     def active(self) -> bool: ...
 
 
+class NoiseSettings:
+    def __init__(self,
+                 octaves: int = 2,
+                 scale: float = 0.08,
+                 activation: float = -0.5,
+                 activation_dir: str = NOISE_LT,
+                 type: str = NOISE_SIMPLEX_2D,
+                 seed: float = None,
+                 user_data=None,
+                 persistence: float = 0.5,
+                 lacunarity: float = 2
+                 ): ...
+
+    def get(self, coordinate: typing.Sequence[float]
+            | float, scale_mul: float = 1) -> float: ...
+    def check(
+        self, coordinate: typing.Sequence[float] | float, scale_mul: float = 1) -> bool: ...
+
+
 class Frame:
     events: list[pygame.Event]
     screen_mouse: Vec
     mouse_rel: Vec
+    mouse_wheel: Vec
     keys = None
     buttons: tuple[int]
     keys_just_pressed = None
@@ -194,30 +223,26 @@ class Camera:
     def refresh(): ...
 
 
-class _BindCode:
-    type: str
-    direction: str
-    code: int
-
-
-class _Bind:
-    main: _BindCode
-    alts: list[_BindCode]
-
-
 class Binds:
     @staticmethod
     def check_frame(name: str) -> bool: ...
     @staticmethod
     def check_event(name: str) -> bool: ...
     @staticmethod
-    def get(name: str) -> _Bind: ...
+    def get(name: str) -> tuple[list[str], list[list[str]]]: ...
+    @staticmethod
+    def remove(name: str): ...
+    @staticmethod
+    def modify(name: str, main: list[str], *alts: list[str]): ...
+    @staticmethod
+    def add(name: str, main: list[str], *alts: list[str]): ...
 
 
 class Light:
     rect: Rect
     intensity: float
     color: tuple[float, float, float]
+    visible: float
     @property
     def position(self) -> Vec: ...
     @property
@@ -229,8 +254,11 @@ class Light:
         color: tuple[float, float, float],
         range: float,
         intensity: float,
+        visible: bool = True,
     ): ...
     def destroy(self): ...
+    def __str__(self) -> str: ...
+    def __repr__(self) -> str: ...
 
 
 class Font:
@@ -277,7 +305,7 @@ class Font:
 
 
 def from_pg_color(
-    color: str | pygame.Color) -> tuple[float, float, float, float]: ...
+    color: str | pygame.Color, alpha: bool = True) -> tuple[float, float, float, float] | tuple[float, float, float]: ...
 
 
 def custom_image_loader(

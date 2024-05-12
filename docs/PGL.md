@@ -8,8 +8,8 @@
 
 ## [Window, Time, Camera, Binds, Frame](windowing.md)
 
-## [Scenes, Entities, Lights](scene.md)
+## [Scenes, Entities, Lights, Containers](scene.md)
 
 ## [Text](font.md)
 
-## [Extra](extra.md)
+## [Timers, Noise, Utilities](extra.md)

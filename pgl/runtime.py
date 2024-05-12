@@ -64,8 +64,7 @@ class _internal:
     _max_lights = 100
     _samplers_amount = 1
     _ambient_light = "0.15, 0.15, 0.15, 1"
-    _render_groups = {}
-    _font_groups = {}
+    _layer_groups = {}
     _cont_entities = {}
     _timers = []
     _custom_image_loaders = []
@@ -273,7 +272,6 @@ void main() {
         }
     }
 
-    @staticmethod
     def _init(config):
         pygame.init()
 
@@ -302,38 +300,17 @@ void main() {
         if "binds" in config:
             for name, data in config["binds"].items():
                 if isinstance(data, list):
-                    code, type_, dir_ = data[0], KEYBOARD, PRESS
-                    if isinstance(code, str):
-                        code = getattr(pygame, code)
-                    if MOUSE in data:
-                        type_ = MOUSE
-                    if RELEASE in data:
-                        dir_ = RELEASE
                     alts = []
-                    main_bind = _internal._BindCode(type_, code, dir_)
+                    main_bind = _internal._parse_bind(data)
                 else:
                     if not "main" in data:
                         raise RuntimeError(
                             f"Bind {name} must specify a main bind code")
-                    code, type_, dir_ = data["main"][0], KEYBOARD, PRESS
-                    if isinstance(code, str):
-                        code = getattr(pygame, code)
-                    if MOUSE in data["main"]:
-                        type_ = MOUSE
-                    if RELEASE in data["main"]:
-                        dir_ = RELEASE
-                    main_bind = _internal._BindCode(type_, code, dir_)
+                    main_bind = _internal._parse_bind(data["main"])
                     alts = []
                     if "alts" in data:
                         for alt in data["alts"]:
-                            code, type_, dir_ = alt[0], KEYBOARD, PRESS
-                            if isinstance(code, str):
-                                code = getattr(pygame, code)
-                            if MOUSE in alt:
-                                type_ = MOUSE
-                            if RELEASE in alt:
-                                dir_ = RELEASE
-                            alts.append(_internal._BindCode(type_, code, dir_))
+                            alts.append(_internal._parse_bind(alt))
                 _internal._binds[name] = _internal._Bind(main_bind, *alts)
 
         if "game" in config:
@@ -362,13 +339,7 @@ void main() {
             _internal._shaders[name] = _internal._gl_context.program(
                 vertex_shader=data["vert"], fragment_shader=fragment_data)
 
-        for layer, data in _internal._render_groups.items():
-            for name, data in data.items():
-                if data["static"]:
-                    data["static"]._make_buffers()
-                if data["dynamic"]:
-                    data["dynamic"]._make_buffers()
-
+        _internal._LayerGroup._apply_make_buffers()
         _internal._update_proj()
         _internal._update_main()
 
@@ -378,8 +349,26 @@ void main() {
             raise RuntimeError(
                 f"game:start-scene entry missing in config.json")
         _internal._scene.on_window_resize()
+        
+    def _parse_bind(data):
+        if isinstance(data, _internal._BindCode):
+            ret = [data.code]
+            if data.type == MOUSE:
+                ret.append(MOUSE)
+            if data.direction == RELEASE:
+                ret.append(RELEASE)
+            return ret
+        if not isinstance(data, list):
+            raise RuntimeError(f"Bind code data must be a list with the code as the first element and optional MOUSE and RELEASE flags as the other elements")
+        code, type_, dir_ = data[0], KEYBOARD, PRESS
+        if isinstance(code, str):
+            code = getattr(pygame, code)
+        if MOUSE in data:
+            type_ = MOUSE
+        if RELEASE in data:
+            dir_ = RELEASE
+        return _internal._BindCode(type_, code, dir_)
 
-    @staticmethod
     def _load_fonts(fonts_data, project_name):
         surfaces = _internal._font_atlas["surfaces"]
         for name, udata in fonts_data.items():
@@ -432,7 +421,6 @@ void main() {
         _internal._samplers_amount += 1
         _internal._build_atlas(_internal._font_atlas)
 
-    @staticmethod
     def _load_images(project_name):
         square = pygame.Surface((10, 10))
         square.fill("white")
@@ -452,7 +440,6 @@ void main() {
             surfaces.update(func())
         _internal._build_atlas(_internal._atlas)
 
-    @staticmethod
     def _build_atlas(data):
         surfs = sorted(list(data["surfaces"].values()),
                        key=lambda surf: surf.get_height(), reverse=True)
@@ -494,7 +481,6 @@ void main() {
                                                         pygame.image.tobytes(main_surf, "RGBA", False))
         data["texture"].filter = (_mgl.NEAREST, _mgl.NEAREST)
 
-    @staticmethod
     def _main(config):
         _internal._init(config)
         Frame.valid = True
@@ -514,6 +500,9 @@ void main() {
                     _internal._update_proj()
                     _internal._update_view()
                     _internal._scene.on_window_resize()
+                elif event.type == pygame.MOUSEWHEEL:
+                    Frame.mouse_wheel.x += event.x
+                    Frame.mouse_wheel.y += event.y
 
             for timer in _internal._timers:
                 if timer.start_time != -1 and Time.time-timer.start_time >= timer.cooldown:
@@ -526,34 +515,15 @@ void main() {
             _internal._scene.update()
             for e in _internal._update_entities:
                 e.update()
-
-            render_groups = _internal._render_groups.copy()
-            for layer, data in _internal._font_groups.items():
-                if layer not in render_groups:
-                    render_groups[layer] = data
-            for layer, data in sorted(render_groups.items(), key=lambda rg: rg[0]):
-                for _, idata in data.items():
-                    if "static" in idata:
-                        if idata["static"]:
-                            idata["static"]._update_render()
-                        if idata["dynamic"]:
-                            idata["dynamic"]._update_render()
-                        if layer in _internal._font_groups:
-                            for _, fdata in _internal._font_groups[layer].items():
-                                if fdata["group"]:
-                                    fdata["group"]._update_render()
-                    else:
-                        if idata["group"]:
-                            idata["group"]._update_render()
+            _internal._LayerGroup._sorted_update_render()
 
             pygame.display.flip()
             if Time.scale < 0:
                 raise RuntimeError("Time scale must be positive")
-            Time.delta = (_internal._clock.tick(
+            Time.delta = (_internal._clock.tick_busy_loop(
                 Time.fps_limit)/1000)*Time.scale
             Time.time += Time.delta
 
-    @staticmethod
     def _update_main():
         Frame.events = pygame.event.get()
         Frame.screen_mouse = Vec(pygame.mouse.get_pos())
@@ -563,6 +533,7 @@ void main() {
         Frame.keys_just_pressed = pygame.key.get_just_pressed()
         Frame.keys_just_released = pygame.key.get_just_released()
         Frame.absolute_time = pygame.time.get_ticks()/1000
+        Frame.mouse_wheel = Vec()
 
         if Camera.zoom <= 0:
             raise RuntimeError("Camera zoom must be greater than zero")
@@ -571,7 +542,6 @@ void main() {
         _internal._upload_samplers()
         _internal._update_light()
 
-    @staticmethod
     def _update_proj():
         win_size = Window.size
 
@@ -587,7 +557,6 @@ void main() {
                                               10*inv_ratio, -10*inv_ratio, Camera.near_plane, Camera.far_plane)
             _internal._unit = win_size.x/10
 
-    @staticmethod
     def _update_view():
 
         _internal._view_mat4 = _glm.scale(_glm.translate(_glm.vec3(-Camera.position.x, -Camera.position.y, 0)),
@@ -612,7 +581,6 @@ void main() {
             if view_uniform is not None:
                 view_uniform.write(_internal._view_mat4)
 
-    @staticmethod
     def _upload_samplers():
         data = _np.fromiter(
             list(range(_internal._samplers_amount)), dtype=_np.int32)
@@ -625,7 +593,6 @@ void main() {
         if _internal._font_atlas["texture"]:
             _internal._font_atlas["texture"].use(_internal._font_atlas["ID"])
 
-    @staticmethod
     def _update_light():
         filter_func = _internal._default_light_filter
         if _internal._light_filter:
@@ -643,9 +610,12 @@ void main() {
         _internal._shaders["lit"]["lightData"] = _np.fromiter(
             light_data, dtype=_np.float32)
 
-    @staticmethod
     def _default_light_filter(light):
         return light.visible and light.rect.colliderect(Camera.rect)
+
+    class _StaticType:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(f"'{self.__class__.__name__}' is a static class and cannot be instantiated")
 
     class _WindowType(type):
         @property
@@ -784,10 +754,33 @@ void main() {
     class _RenderGroup:
         def __init__(self, shader, layer, static, sortmode):
             self._shader, self._layer, self._static, self._sortmode = shader, layer, static, sortmode
-            _internal._render_groups[layer][shader]["static" if static else "dynamic"] = self
+            _internal._LayerGroup._set_render_group(layer, shader, self, static)
             self._reserved_len = 10
             self._entities = []
             self._dirty = False
+            
+        def _reset(self):
+            self._entities = []
+            self._reserved_len = 10
+            self._dirty = True
+        
+        @staticmethod
+        def _exist_create(layer, shader, static, sortmode):
+            shader_group = _internal._layer_groups[layer]._shader_groups[shader]
+            if static:
+                if not shader_group._static_rg:
+                    _internal._RenderGroup(shader, layer, static, sortmode)
+            else:
+                if not shader_group._dynamic_rg:
+                    _internal._RenderGroup(shader, layer, static, sortmode)
+        
+        @staticmethod
+        def _get(layer, shader, static):
+            shader_group = _internal._layer_groups[layer]._shader_groups[shader]
+            if static:
+                return shader_group._static_rg
+            else:
+                return shader_group._dynamic_rg
 
         def _make_buffers(self):
             if not _internal._scene_init_complete:
@@ -898,11 +891,16 @@ void main() {
     class _FontGroup:
         def __init__(self, shader, layer):
             self._shader, self._layer = shader, layer
-            _internal._font_groups[layer][shader]["group"] = self
+            _internal._LayerGroup._set_font_group(layer, shader, self)
             self._reserved_len = 100
             self._data = []
             self._dirty = False
             self._make_buffers()
+            
+        def _reset(self):
+            self._data = []
+            self._reserved_len = 100
+            self._dirty = True
 
         def _update_render(self):
             if self._dirty:
@@ -968,13 +966,16 @@ void main() {
                 raise RuntimeError(f"Invalid text alignment '{align}'")
             if max_width < 0:
                 raise RuntimeError(f"Max text width must be >= 0")
-            if layer not in _internal._font_groups:
-                _internal._font_groups[layer] = {
-                    name: {"group": None} for name in _internal._SHADER_SOURCE.keys()
-                }
-            if _internal._font_groups[layer][shader]["group"] is None:
-                _internal._FontGroup(shader, layer)
-            return color, _internal._fonts_data[font_name], _internal._font_groups[layer][shader]["group"]
+            _internal._LayerGroup._exist_create(layer)
+            font_group = _internal._FontGroup._exist_create(layer, shader)
+            return color, _internal._fonts_data[font_name], font_group
+        
+        @staticmethod
+        def _exist_create(layer, shader):
+            shader_group = _internal._layer_groups[layer]._shader_groups[shader]
+            if not shader_group._font_group:
+                return _internal._FontGroup(shader, layer)
+            return shader_group._font_group
 
         @staticmethod
         def _char_pos(char, position_name, position, w, h):
@@ -1006,9 +1007,67 @@ void main() {
                 char[1] += position[0]-w/2
                 char[2] += position[1]
 
+    class _LayerGroup:
+        def __init__(self, layer):
+            self._layer = layer
+            self._shader_groups = {
+                shader:_internal._ShaderGroup(shader) for shader in _internal._SHADER_SOURCE.keys()
+            }
+            
+        def _exist_create(layer):
+            if layer not in _internal._layer_groups:
+                _internal._layer_groups[layer] = _internal._LayerGroup(layer)
+            
+        def _set_render_group(layer, shader, render_group, static):
+            shader_group = _internal._layer_groups[layer]._shader_groups[shader]
+            if static:
+                shader_group._static_rg = render_group
+            else:
+                shader_group._dynamic_rg = render_group
+                
+        def _set_font_group(layer, shader, font_group):
+            shader_group = _internal._layer_groups[layer]._shader_groups[shader]
+            shader_group._font_group = font_group
+            
+        def _apply_reset():
+            for _, layer_group in _internal._layer_groups.items():
+                for _, shader_group in layer_group._shader_groups.items():
+                    shader_group._reset()
+                    
+        def _apply_make_buffers():
+            for _, layer_group in _internal._layer_groups.items():
+                for _, shader_group in layer_group._shader_groups.items():
+                    shader_group._make_buffers()
+                    
+        def _sorted_update_render():
+            for _, layer_group in sorted(_internal._layer_groups.items(), key=lambda lg: lg[0]):
+                for _, shader_group in layer_group._shader_groups.items():
+                    shader_group._update_render()
+        
+    class _ShaderGroup:
+        def __init__(self, shader):
+            self._shader = shader
+            self._dynamic_rg = None
+            self._static_rg = None
+            self._font_group = None
+            
+        def _make_buffers(self):
+            for g in [self._dynamic_rg, self._static_rg, self._font_group]:
+                if g:
+                    g._make_buffers()
+            
+        def _reset(self):
+            for g in [self._dynamic_rg, self._static_rg, self._font_group]:
+                if g:
+                    g._reset()
+            
+        def _update_render(self):
+            for g in [self._dynamic_rg, self._static_rg, self._font_group]:
+                if g:
+                    g._update_render()
 
-class Font:
-    @staticmethod
+
+class Font(_internal._StaticType):
     def clear(layer=0, shader=UI_SHADER):
         if layer not in _internal._font_groups:
             _internal._font_groups[layer] = {
@@ -1020,7 +1079,6 @@ class Font:
         group._data = []
         group._dirty = True
 
-    @staticmethod
     def render_center(font_name, text, position, color=None, scale=1, layer=0, shader=UI_SHADER):
         color, data, font_group = _internal._FontGroup._render_check(
             font_name, "center", color, layer, shader, 0, "center")
@@ -1039,7 +1097,6 @@ class Font:
                 char[3], data["height"]*scale), color, _internal._font_atlas["uvs"][f"{font_name}_{char[0]}"]))
         return Vec(w, h)
 
-    @staticmethod
     def render(font_name, text, position, position_name=TEXTPOS_CENTER, color=None, scale=1, layer=0, shader=UI_SHADER):
         color, data, font_group = _internal._FontGroup._render_check(
             font_name, position_name, color, layer, shader, 0, "center")
@@ -1059,7 +1116,6 @@ class Font:
                 char[3], data["height"]*scale), color, _internal._font_atlas["uvs"][f"{font_name}_{char[0]}"]))
         return Vec(w, h)
 
-    @staticmethod
     def render_lines(font_name, text, position, position_name=TEXTPOS_CENTER, max_width=0, color=None, align=ALIGN_CENTER, scale=1, layer=0, shader=UI_SHADER, words_intact=True):
         color, data, font_group = _internal._FontGroup._render_check(
             font_name, position_name, color, layer, shader, max_width, align)
@@ -1138,29 +1194,50 @@ class Light:
 
     def destroy(self):
         _internal._lights.remove(self)
+        
+    def __str__(self):
+        return f"Light({self.rect.center}, color={self.color}, range={self.rect.w}, intensity={self.intensity}, visible={self.visible})"
+    __repr__ = __str__
+    
 
-
-class Binds:
-    @staticmethod
+class Binds(_internal._StaticType):
     def check_frame(name):
         if name not in _internal._binds:
             raise RuntimeError(f"Bind {name} does not exist")
         return _internal._binds[name]._check_frame()
 
-    @staticmethod
     def check_event(name):
         if name not in _internal._binds:
             raise RuntimeError(f"Bind {name} does not exist")
         return _internal._binds[name]._check_event()
 
-    @staticmethod
     def get(name):
         if name not in _internal._binds:
             raise RuntimeError(f"Bind {name} does not exist")
-        return _internal._binds[name]
+        bind = _internal._binds[name]
+        return _internal._parse_bind(bind.main), [_internal._parse_bind(alt) for alt in bind.alts]
+        
+    def modify(name, main, *alts):
+        if name not in _internal._binds:
+            raise RuntimeError(f"Bind '{name}' does not exist")
+        bind = _internal._binds[name]
+        bind.main = _internal._parse_bind(main)
+        bind.alts = [_internal._parse_bind(alt) for alt in alts]
+        
+    def add(name, main, *alts):
+        if name in _internal._binds:
+            raise RuntimeError(f"Bind '{name}' already exists")
+        main = _internal._parse_bind(main)
+        alts = [_internal._parse_bind(alt) for alt in alts]
+        _internal._binds[name] = _internal._Bind(main, *alts)
+        
+    def remove(name):
+        if name not in _internal._binds:
+            raise RuntimeError(f"Bind {name} does not exist")
+        _internal._binds.pop(name)
 
 
-class Camera:
+class Camera(_internal._StaticType):
     position = Vec()
     zoom = 1.0
     rect = Rect(0, 0, 0, 0)
@@ -1169,35 +1246,32 @@ class Camera:
     near_plane = -10000
     far_plane = 10000
 
-    @staticmethod
     def screen_to_world(screen_pos):
         direction = (screen_pos-Window.center)/Camera.zoom/(_internal._unit/2)
         return direction+Camera.position
 
-    @staticmethod
     def screen_to_ui(screen_pos):
         return (screen_pos-Window.center)/(_internal._unit/2)
 
-    @staticmethod
     def refresh():
         _internal._update_view()
 
 
-class Window(metaclass=_internal._WindowType):
+class Window(_internal._StaticType, metaclass=_internal._WindowType):
     rect = Rect(0, 0, 0, 0)
 
-    @staticmethod
     def quit():
         _internal._scene.on_quit()
         pygame.quit()
         sys.exit()
 
 
-class Frame:
+class Frame(_internal._StaticType):
     valid = False
     events = None
     screen_mouse = None
     mouse_rel = None
+    mouse_wheel = None
     keys = None
     buttons = None
     keys_just_pressed = None
@@ -1205,18 +1279,16 @@ class Frame:
     absolute_time = None
 
 
-class Time(metaclass=_internal._TimeType):
+class Time(_internal._StaticType, metaclass=_internal._TimeType):
     fps_limit = 0
     delta = 0
     scale = 1
     time = pygame.time.get_ticks()/1000
 
-    @staticmethod
     def pause():
         global scale
         scale = 0
 
-    @staticmethod
     def unpause(new_scale=1):
         global scale
         scale = new_scale
@@ -1306,38 +1378,12 @@ class Scene:
         _internal._update_entities = []
         _internal._scene_init_complete = False
         _internal._lights = []
-        for layer, data in _internal._render_groups.items():
-            for dname, data in data.items():
-                if data["static"]:
-                    data["static"]._entities = []
-                    data["static"]._reserved_len = 10
-                    data["static"]._dirty = True
-                if data["dynamic"]:
-                    data["dynamic"]._entities = []
-                    data["dynamic"]._reserved_len = 10
-                    data["dynamic"]._dirty = True
-        for layer, data in _internal._font_groups.items():
-            for dname, data in data.items():
-                if data["group"]:
-                    data["group"]._data = []
-                    data["group"]._dirty = True
-                    data["group"]._reserved_len = 100
-
+        _internal._LayerGroup._apply_reset()
         new = _internal._scenes[name]()
         _internal._scene = new
         new.init()
         _internal._scene_init_complete = True
-
-        for layer, data in _internal._render_groups.items():
-            for name, data in data.items():
-                if data["static"]:
-                    data["static"]._make_buffers()
-                if data["dynamic"]:
-                    data["dynamic"]._make_buffers()
-        for layer, data in _internal._font_groups.items():
-            for dname, data in data.items():
-                if data["group"]:
-                    data["group"]._make_buffers()
+        _internal._LayerGroup._apply_make_buffers()
         return new
 
     @staticmethod
@@ -1358,6 +1404,10 @@ class Scene:
 
     def on_window_resize(self):
         ...
+        
+    def __str__(self):
+        return f"{self.name} Scene"
+    __repr__ = __str__
 
 
 class Entity:
@@ -1396,50 +1446,47 @@ class Entity:
         sortmode = "none"
         if TOPDOWN_SORT in flags:
             sortmode = TOPDOWN_SORT
-        if layer not in _internal._render_groups:
-            _internal._render_groups[layer] = {
-                name: {"static": None, "dynamic": None} for name in _internal._SHADER_SOURCE.keys()
-            }
-        if _internal._render_groups[layer][shader]["static" if STATIC in flags else "dynamic"] is None:
-            _internal._RenderGroup(shader, layer, STATIC in flags, sortmode)
-
+        _internal._LayerGroup._exist_create(layer)
+        _internal._RenderGroup._exist_create(layer, shader, STATIC in flags, sortmode)
+        
     @classmethod
     def new(cls, position=None, size=None, angle=None, color=None, image=None, flip=None, containers=None):
         if not hasattr(cls, "_meta_subclass_"):
             raise RuntimeError(
                 f"Entity cannot be instantiated, you can only instantiate subclasses")
         new = cls()
+        metasub = cls._meta_subclass_
+        flags = metasub["flags"]
         if position is None:
             position = (0, 0)
         if angle is None:
             angle = 0
         if size is None:
-            size = cls._meta_subclass_["size"]
+            size = metasub["size"]
         if color is None:
             color = (1, 1, 1, 1)
         if image is None:
-            image = cls._meta_subclass_["image"]
+            image = metasub["image"]
         if containers is None:
             containers = ()
         if len(color) == 3:
             color = (*color, 1)
         if flip is None:
-            flip = cls._meta_subclass_["flip"]
+            flip = metasub["flip"]
         group = None
 
-        for tag in cls._meta_subclass_["tags"]:
+        for tag in metasub["tags"]:
             if not tag in _internal._tag_entities:
                 _internal._tag_entities[tag] = set()
             _internal._tag_entities[tag].add(new)
-        if UPDATE in cls._meta_subclass_["flags"]:
+        if UPDATE in flags:
             _internal._update_entities.append(new)
-        if not INVISIBLE in cls._meta_subclass_["flags"]:
-            group = _internal._render_groups[cls._meta_subclass_["layer"]][cls._meta_subclass_[
-                "shader"]]["static" if cls._meta_subclass_["static"] else "dynamic"]
+        if not INVISIBLE in flags:
+            group = _internal._RenderGroup._get(metasub["layer"], metasub["shader"], STATIC in flags)
             group._add(new)
 
         new._meta_ = {
-            "tags": tuple(cls._meta_subclass_["tags"]),
+            "tags": tuple(metasub["tags"]),
             "rect": Rect((0, 0), size).move_to(center=position),
             "angle": angle,
             "color": color,
@@ -1449,7 +1496,7 @@ class Entity:
             "dirty": True,
             "render_data": None,
             "conts": [],
-            "update": UPDATE in cls._meta_subclass_["flags"]
+            "update": UPDATE in flags
         }
         for cont in containers:
             cont.add(new)
