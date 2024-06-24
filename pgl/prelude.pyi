@@ -45,6 +45,7 @@ NOISE_PERLIN_1D = "perlin1D"
 NOISE_PERLIN_2D = "perlin2D"
 NOISE_PERLIN_3D = "perlin3D"
 
+class PGLError(RuntimeError): ...
 
 class Entity:
     name: str
@@ -58,7 +59,6 @@ class Entity:
         image: str = "square",
         flip: typing.Sequence[bool] = (False, False),
     ): ...
-
     @classmethod
     def new(
         cls,
@@ -103,7 +103,6 @@ class Entity:
     def __str__(self) -> str: ...
     def __repr__(self) -> str: ...
 
-
 class Container:
     def __init__(self, *entities: Entity): ...
     def add(self, *entities: Entity): ...
@@ -121,7 +120,6 @@ class Container:
     def __str__(self) -> str: ...
     def __repr__(self) -> str: ...
 
-
 class Scene:
     name: str
     clear_color: tuple[float, float, float, float]
@@ -135,7 +133,6 @@ class Scene:
     def load(name: str) -> "Scene": ...
     def __str__(self) -> str: ...
     def __repr__(self) -> str: ...
-
 
 class Time:
     def __init__(self, *args, **kwargs) -> typing.Never: ...
@@ -151,7 +148,6 @@ class Time:
     @staticmethod
     def unpause(new_scale: float): ...
 
-
 class Timer:
     cooldown: float
 
@@ -161,31 +157,31 @@ class Timer:
         end_callback: typing.Callable[[], bool],
         start: bool = True,
         *callback_args,
-        **callback_kwargs
+        **callback_kwargs,
     ): ...
     def start(self): ...
     @property
     def active(self) -> bool: ...
 
-
 class NoiseSettings:
-    def __init__(self,
-                 octaves: int = 2,
-                 scale: float = 0.08,
-                 activation: float = -0.5,
-                 activation_dir: str = NOISE_LT,
-                 type: str = NOISE_SIMPLEX_2D,
-                 seed: float = None,
-                 user_data=None,
-                 persistence: float = 0.5,
-                 lacunarity: float = 2
-                 ): ...
-
-    def get(self, coordinate: typing.Sequence[float]
-            | float, scale_mul: float = 1) -> float: ...
+    def __init__(
+        self,
+        octaves: int = 2,
+        scale: float = 0.08,
+        activation: float = -0.5,
+        activation_dir: str = NOISE_LT,
+        type: str = NOISE_SIMPLEX_2D,
+        seed: float = None,
+        user_data=None,
+        persistence: float = 0.5,
+        lacunarity: float = 2,
+    ): ...
+    def get(
+        self, coordinate: typing.Sequence[float] | float, scale_mul: float = 1
+    ) -> float: ...
     def check(
-        self, coordinate: typing.Sequence[float] | float, scale_mul: float = 1) -> bool: ...
-
+        self, coordinate: typing.Sequence[float] | float, scale_mul: float = 1
+    ) -> bool: ...
 
 class Frame:
     def __init__(self, *args, **kwargs) -> typing.Never: ...
@@ -200,7 +196,6 @@ class Frame:
     absolute_time: int
     valid: bool
 
-
 class Window:
     def __init__(self, *args, **kwargs) -> typing.Never: ...
     pixel_rect: Rect
@@ -212,7 +207,6 @@ class Window:
     rect: Rect
     @staticmethod
     def quit(): ...
-
 
 class Camera:
     def __init__(self, *args, **kwargs) -> typing.Never: ...
@@ -230,7 +224,6 @@ class Camera:
     @staticmethod
     def refresh(): ...
 
-
 class Binds:
     def __init__(self, *args, **kwargs) -> typing.Never: ...
     @staticmethod
@@ -245,8 +238,7 @@ class Binds:
     def modify(name: str, main: list[str], *alts: list[str]): ...
     @staticmethod
     def add(name: str, main: list[str], *alts: list[str]): ...
-    
-    
+
 class Sounds:
     volume: float
     @staticmethod
@@ -259,11 +251,10 @@ class Sounds:
     def get_sound_volume(name: str) -> float: ...
     @staticmethod
     def get_sound_objects(name: str) -> list[pygame.mixer.Sound]: ...
-    
-    
+
 class Musics:
     volume: float
-    playing: str|None
+    playing: str | None
     @staticmethod
     def play(name: str, loops: int = -1, start: int = 0, fade_ms: int = 0): ...
     @staticmethod
@@ -277,7 +268,6 @@ class Musics:
     @staticmethod
     def get_music_volume(name: str) -> float: ...
 
-
 class Light:
     rect: Rect
     intensity: float
@@ -287,7 +277,6 @@ class Light:
     def position(self) -> Vec: ...
     @property
     def range(self) -> float: ...
-
     def __init__(
         self,
         position: typing.Sequence[float],
@@ -299,7 +288,6 @@ class Light:
     def destroy(self): ...
     def __str__(self) -> str: ...
     def __repr__(self) -> str: ...
-
 
 class Font:
     def __init__(self, *args, **kwargs) -> typing.Never: ...
@@ -317,7 +305,6 @@ class Font:
         shader: str = UI_SHADER,
         words_intact: bool = True,
     ) -> Vec: ...
-
     @staticmethod
     def render(
         font_name: str,
@@ -329,7 +316,6 @@ class Font:
         layer: int = 0,
         shader: str = UI_SHADER,
     ) -> Vec: ...
-
     @staticmethod
     def render_center(
         font_name: str,
@@ -340,29 +326,21 @@ class Font:
         layer: int = 0,
         shader: str = UI_SHADER,
     ) -> Vec: ...
-
     @staticmethod
     def clear(layer=0, shader=UI_SHADER): ...
-    
-    
+
 class frange:
     def __init__(self, start: float, stop: float, step: float): ...
     def __iter__(self) -> typing.Self: ...
     def __next__(self) -> float: ...
 
-
 def from_pg_color(
-    color: str | pygame.Color, alpha: bool = True) -> tuple[float, float, float, float] | tuple[float, float, float]: ...
-
-
+    color: str | pygame.Color, alpha: bool = True
+) -> tuple[float, float, float, float] | tuple[float, float, float]: ...
 def custom_image_loader(
-    func: typing.Callable[[], dict[str, pygame.Surface]]
+    func: typing.Callable[[], dict[str, pygame.Surface]],
 ) -> typing.Callable[[], dict[str, pygame.Surface]]: ...
-
-
 def light_filter(
-    func: typing.Callable[[Light], bool]
+    func: typing.Callable[[Light], bool],
 ) -> typing.Callable[[Light], bool]: ...
-
-
 def custom_image_canvas(size: list[int] = (100, 100)) -> pygame.Surface: ...

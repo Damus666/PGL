@@ -2,12 +2,14 @@
 
 # Console Interface
 
-Using the command `python/python3 pgl` you get access to the console interface. It allows to:
+Using the command `python/python3 pgl` you get access to the console interface. Use `python pgl help` for all commands. It allows to:
 
 - Create projects
 - Compile projects
 - Run projects
 - Set the projects directory
+- Start the app (`python pgl app`)
+- See all the projects (`python pgl list`)
 
 ## Set the projects directory
 

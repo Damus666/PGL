@@ -12,7 +12,9 @@ import math
 import typing as typing
 # todo: particles, collision
 
+
 class PGLError(RuntimeError): ...
+
 
 Rect = pygame.FRect
 Vec = pygame.Vector2
@@ -86,7 +88,7 @@ class _internal:
         "texture": None,
         "height": 0,
         "width": 0,
-        "uvs": {}
+        "uvs": {},
     }
     _font_atlas = {
         "ID": 1,
@@ -94,7 +96,7 @@ class _internal:
         "texture": None,
         "height": 0,
         "width": 0,
-        "uvs": {}
+        "uvs": {},
     }
     _SHADER_SOURCE = {
         "replace": {
@@ -136,7 +138,7 @@ void main() {
         discard;
     }
     oCol = vec4(fCol.xyz * ((texCol.r+texCol.g+texCol.b)/3.0), fCol.a*texCol.a);
-}"""
+}""",
         },
         "ui": {
             "vert": """
@@ -175,7 +177,7 @@ void main() {
     if (oCol.a <= 0.0) {
         discard;
     }
-}"""
+}""",
         },
         "lit": {
             "vert": """
@@ -235,7 +237,8 @@ void main() {
                     lightData[i+6];
     }
     oCol = finalCol;
-}"""},
+}""",
+        },
         "unlit": {
             "vert": """
 #version 450 core
@@ -276,8 +279,8 @@ void main() {
         discard;
     }
 }
-        """
-        }
+        """,
+        },
     }
 
     def _init(config):
@@ -303,7 +306,10 @@ void main() {
 
         _internal._gl_context = _mgl.create_context()
         _internal._gl_context.enable(_mgl.BLEND)
-        _internal._gl_context.blend_func = _internal._gl_context.SRC_ALPHA, _internal._gl_context.ONE_MINUS_SRC_ALPHA
+        _internal._gl_context.blend_func = (
+            _internal._gl_context.SRC_ALPHA,
+            _internal._gl_context.ONE_MINUS_SRC_ALPHA,
+        )
 
         if "binds" in config:
             for name, data in config["binds"].items():
@@ -312,8 +318,7 @@ void main() {
                     main_bind = _internal._parse_bind(data)
                 else:
                     if "main" not in data:
-                        raise PGLError(
-                            f"Bind {name} must specify a main bind code")
+                        raise PGLError(f"Bind {name} must specify a main bind code")
                     main_bind = _internal._parse_bind(data["main"])
                     alts = []
                     if "alts" in data:
@@ -322,7 +327,10 @@ void main() {
                 _internal._binds[name] = _internal._Bind(main_bind, *alts)
 
         if "game" in config:
-            if "framerate-limit" in config["game"] and config["game"]["framerate-limit"] != "unlimited":
+            if (
+                "framerate-limit" in config["game"]
+                and config["game"]["framerate-limit"] != "unlimited"
+            ):
                 Time.fps_limit = max(0, config["game"]["framerate-limit"])
             if "max-lights" in config["game"]:
                 if not isinstance(config["game"]["max-lights"], int):
@@ -341,13 +349,17 @@ void main() {
 
         for name, data in _internal._SHADER_SOURCE.items():
             fragment_data = data["frag"].replace(
-                "{SAMPLERS_AMOUNT}", f"{_internal._samplers_amount}")
+                "{SAMPLERS_AMOUNT}", f"{_internal._samplers_amount}"
+            )
             fragment_data = fragment_data.replace(
-                "{MAX_LIGHTS}", f"{_internal._max_lights}")
+                "{MAX_LIGHTS}", f"{_internal._max_lights}"
+            )
             fragment_data = fragment_data.replace(
-                "{AMBIENT_LIGHT}", _internal._ambient_light)
+                "{AMBIENT_LIGHT}", _internal._ambient_light
+            )
             _internal._shaders[name] = _internal._gl_context.program(
-                vertex_shader=data["vert"], fragment_shader=fragment_data)
+                vertex_shader=data["vert"], fragment_shader=fragment_data
+            )
 
         _internal._LayerGroup._apply_make_buffers()
         _internal._update_proj()
@@ -356,10 +368,9 @@ void main() {
         if "game" in config and "start-scene" in config["game"]:
             Scene.load(config["game"]["start-scene"])
         else:
-            raise PGLError(
-                "game:start-scene entry missing in config.json")
+            raise PGLError("game:start-scene entry missing in config.json")
         _internal._scene.on_window_resize()
-        
+
     def _load_sounds(sounds, project_path):
         if not isinstance(sounds, dict):
             raise PGLError("Sounds entry of config.json must be a dictionary")
@@ -395,13 +406,17 @@ void main() {
                     break
             if len(sounds) == 0:
                 if ext == "folder":
-                    raise PGLError(f"Sound folder {name} was not found. Did you assign the wrong extension?")
-                raise PGLError(f"Sound {name}.{ext} was not found. Did you forget to assign the correct extension?")
+                    raise PGLError(
+                        f"Sound folder {name} was not found. Did you assign the wrong extension?"
+                    )
+                raise PGLError(
+                    f"Sound {name}.{ext} was not found. Did you forget to assign the correct extension?"
+                )
             if music:
                 _internal._musics[name] = {"path": sounds[0], "volume": volume}
             else:
                 _internal._sounds[name] = _internal._SoundAsset(sounds, volume)
-        
+
     def _parse_bind(data):
         if isinstance(data, _internal._BindCode):
             ret = [data.code]
@@ -411,7 +426,9 @@ void main() {
                 ret.append(RELEASE)
             return ret
         if not isinstance(data, list):
-            raise PGLError("Bind code data must be a list with the code as the first element and optional MOUSE and RELEASE flags as the other elements")
+            raise PGLError(
+                "Bind code data must be a list with the code as the first element and optional MOUSE and RELEASE flags as the other elements"
+            )
         code, type_, dir_ = data[0], KEYBOARD, PRESS
         if isinstance(code, str):
             code = getattr(pygame, code)
@@ -434,8 +451,7 @@ void main() {
             if "bitmap-size" in udata:
                 bitmap_size = udata["bitmap-size"]
             if "path" in udata:
-                real_path = _path.Path(
-                    f"{project_path}assets/{udata['path']}")
+                real_path = _path.Path(f"{project_path}assets/{udata['path']}")
                 if real_path.exists():
                     font_path = real_path
                 else:
@@ -457,20 +473,20 @@ void main() {
             if "chars" in udata:
                 chars = udata["chars"]
             else:
-                chars = _string.ascii_letters+_string.digits+_string.punctuation+" "
+                chars = (
+                    _string.ascii_letters + _string.digits + _string.punctuation + " "
+                )
             if "extra-chars" in udata:
                 chars += udata["extra-chars"]
             if "base-scale" in udata:
                 base_scale = udata["base-scale"]
             data = {
-                "height": pg_font.get_height()/bitmap_size*base_scale,
-                "chars_w": {}
+                "height": pg_font.get_height() / bitmap_size * base_scale,
+                "chars_w": {},
             }
             for char in chars:
-                surfaces[f"{name}_{char}"] = pg_font.render(
-                    char, antialas, "white")
-                data["chars_w"][char] = pg_font.size(
-                    char)[0]/bitmap_size*base_scale
+                surfaces[f"{name}_{char}"] = pg_font.render(char, antialas, "white")
+                data["chars_w"][char] = pg_font.size(char)[0] / bitmap_size * base_scale
             _internal._fonts_data[name] = data
         if len(surfaces) <= 0:
             return
@@ -485,7 +501,7 @@ void main() {
 
         for dirpath, _, files in os.walk(f"{project_path}assets"):
             for file in files:
-                file = _path.Path(dirpath+"/"+file)
+                file = _path.Path(dirpath + "/" + file)
                 if not file.stem.startswith("ignore"):
                     try:
                         surf = pygame.image.load(str(file)).convert_alpha()
@@ -497,44 +513,53 @@ void main() {
         _internal._build_atlas(_internal._atlas)
 
     def _build_atlas(data):
-        surfs = sorted(list(data["surfaces"].values()),
-                       key=lambda surf: surf.get_height(), reverse=True)
+        surfs = sorted(
+            list(data["surfaces"].values()),
+            key=lambda surf: surf.get_height(),
+            reverse=True,
+        )
         inv_surfs = {id(surf): name for name, surf in data["surfaces"].items()}
         data["height"] = math.sqrt(
-            sum([surf.get_width()*surf.get_height() for surf in surfs]))
+            sum([surf.get_width() * surf.get_height() for surf in surfs])
+        )
         positions = []
         x = y = bw = 0
         for surf in surfs:
             w, h = surf.get_size()
-            if data["height"]-y < h:
+            if data["height"] - y < h:
                 y = 0
-                x += bw+2
+                x += bw + 2
                 bw = 0
             if w > bw:
                 bw = w
             positions.append([surf, w, h, x, y])
-            y += h+2
-        data["width"] = x+bw
+            y += h + 2
+        data["width"] = x + bw
         main_surf = pygame.Surface(
-            (data["width"], int(data["height"]*1.01)), pygame.SRCALPHA)
+            (data["width"], int(data["height"] * 1.01)), pygame.SRCALPHA
+        )
         main_surf.fill(0)
         for surf, w, h, x, y in positions:
             surf: pygame.Surface
-            data["uvs"][inv_surfs[id(surf)]] = _internal._RenderGroup._uvs_atlas(data["width"],
-                                                                                 int(data["height"]*1.01), w, h, x, y)
+            data["uvs"][inv_surfs[id(surf)]] = _internal._RenderGroup._uvs_atlas(
+                data["width"], int(data["height"] * 1.01), w, h, x, y
+            )
             a = surf.get_at((0, 0)).a
-            b = surf.get_at((w-1, h-1)).a
-            c = surf.get_at((0, h-1)).a
-            d = surf.get_at((w-1, 0)).a
+            b = surf.get_at((w - 1, h - 1)).a
+            c = surf.get_at((0, h - 1)).a
+            d = surf.get_at((w - 1, 0)).a
             if a >= 255 and b >= 255 and c >= 255 and d >= 255:
-                main_surf.blit(pygame.transform.scale(
-                    surf, (w+2, h+2)), (x-1, y-1))
+                main_surf.blit(
+                    pygame.transform.scale(surf, (w + 2, h + 2)), (x - 1, y - 1)
+                )
             main_surf.blit(surf, (x, y))
         if False:
             pygame.image.save(
-                main_surf, "test.png" if data["ID"] == 0 else "fonttest.png")
-        data["texture"] = _internal._gl_context.texture(main_surf.get_size(), 4,
-                                                        pygame.image.tobytes(main_surf, "RGBA", False))
+                main_surf, "test.png" if data["ID"] == 0 else "fonttest.png"
+            )
+        data["texture"] = _internal._gl_context.texture(
+            main_surf.get_size(), 4, pygame.image.tobytes(main_surf, "RGBA", False)
+        )
         data["texture"].filter = (_mgl.NEAREST, _mgl.NEAREST)
 
     def _main(config):
@@ -561,10 +586,14 @@ void main() {
                     Frame.mouse_wheel.y += event.y
 
             for timer in _internal._timers:
-                if timer.start_time != -1 and Time.time-timer.start_time >= timer.cooldown:
+                if (
+                    timer.start_time != -1
+                    and Time.time - timer.start_time >= timer.cooldown
+                ):
                     timer.start_time = -1
                     can_restart = timer.end_callback(
-                        *timer.callback_args, **timer.callback_kwargs)
+                        *timer.callback_args, **timer.callback_kwargs
+                    )
                     if can_restart:
                         timer.start()
 
@@ -576,8 +605,9 @@ void main() {
             pygame.display.flip()
             if Time.scale < 0:
                 raise PGLError("Time scale must be positive")
-            Time.delta = (_internal._clock.tick_busy_loop(
-                Time.fps_limit)/1000)*Time.scale
+            Time.delta = (
+                _internal._clock.tick_busy_loop(Time.fps_limit) / 1000
+            ) * Time.scale
             Time.time += Time.delta
 
     def _update_main():
@@ -588,7 +618,7 @@ void main() {
         Frame.buttons = pygame.mouse.get_pressed()
         Frame.keys_just_pressed = pygame.key.get_just_pressed()
         Frame.keys_just_released = pygame.key.get_just_released()
-        Frame.absolute_time = pygame.time.get_ticks()/1000
+        Frame.absolute_time = pygame.time.get_ticks() / 1000
         Frame.mouse_wheel = Vec()
 
         if Camera.zoom <= 0:
@@ -601,28 +631,42 @@ void main() {
     def _update_proj():
         win_size = Window.size
 
-        ratio = win_size.x/win_size.y
-        inv_ratio = win_size.y/win_size.x
+        ratio = win_size.x / win_size.y
+        inv_ratio = win_size.y / win_size.x
 
         if ratio > inv_ratio:
-            _internal._proj_mat4 = _glm.ortho(-10*ratio, 10*ratio,
-                                              10, -10, Camera.near_plane, Camera.far_plane)
-            _internal._unit = win_size.y/10
+            _internal._proj_mat4 = _glm.ortho(
+                -10 * ratio, 10 * ratio, 10, -10, Camera.near_plane, Camera.far_plane
+            )
+            _internal._unit = win_size.y / 10
         else:
-            _internal._proj_mat4 = _glm.ortho(-10, 10,
-                                              10*inv_ratio, -10*inv_ratio, Camera.near_plane, Camera.far_plane)
-            _internal._unit = win_size.x/10
+            _internal._proj_mat4 = _glm.ortho(
+                -10,
+                10,
+                10 * inv_ratio,
+                -10 * inv_ratio,
+                Camera.near_plane,
+                Camera.far_plane,
+            )
+            _internal._unit = win_size.x / 10
 
     def _update_view():
-
-        _internal._view_mat4 = _glm.scale(_glm.translate(_glm.vec3(-Camera.position.x, -Camera.position.y, 0)),
-                                          _glm.vec3(Camera.zoom, Camera.zoom, 1))
+        _internal._view_mat4 = _glm.scale(
+            _glm.translate(_glm.vec3(-Camera.position.x, -Camera.position.y, 0)),
+            _glm.vec3(Camera.zoom, Camera.zoom, 1),
+        )
         size = Window.size
 
-        Window.rect = pygame.FRect(-size.x/_internal._unit, -size.y/_internal._unit,
-                                   (size.x/_internal._unit)*2, (size.y/_internal._unit)*2)
-        Camera.rect = pygame.FRect(Camera.screen_to_world(pygame.Vector2(
-            0, 0)), (Window.rect.w/Camera.zoom, Window.rect.h/Camera.zoom))
+        Window.rect = pygame.FRect(
+            -size.x / _internal._unit,
+            -size.y / _internal._unit,
+            (size.x / _internal._unit) * 2,
+            (size.y / _internal._unit) * 2,
+        )
+        Camera.rect = pygame.FRect(
+            Camera.screen_to_world(pygame.Vector2(0, 0)),
+            (Window.rect.w / Camera.zoom, Window.rect.h / Camera.zoom),
+        )
 
         Camera.ui_mouse = Camera.screen_to_ui(Frame.screen_mouse)
         Camera.world_mouse = Camera.screen_to_world(Frame.screen_mouse)
@@ -638,8 +682,7 @@ void main() {
                 view_uniform.write(_internal._view_mat4)
 
     def _upload_samplers():
-        data = _np.fromiter(
-            list(range(_internal._samplers_amount)), dtype=_np.int32)
+        data = _np.fromiter(list(range(_internal._samplers_amount)), dtype=_np.int32)
         for shader in _internal._shaders.values():
             uniform = shader.get("textures", None)
             if uniform is not None:
@@ -659,12 +702,16 @@ void main() {
             if not light.visible:
                 continue
             light_num += 1
-            light_data += [*light.rect.center, *
-                           light.color, light.rect.w, light.intensity]
-        _internal._shaders["lit"]["numLights"] = min(
-            light_num, _internal._max_lights)
+            light_data += [
+                *light.rect.center,
+                *light.color,
+                light.rect.w,
+                light.intensity,
+            ]
+        _internal._shaders["lit"]["numLights"] = min(light_num, _internal._max_lights)
         _internal._shaders["lit"]["lightData"] = _np.fromiter(
-            light_data, dtype=_np.float32)
+            light_data, dtype=_np.float32
+        )
 
     def _default_light_filter(light):
         return light.visible and light.rect.colliderect(Camera.rect)
@@ -675,15 +722,15 @@ void main() {
             for sound in self._pg_sounds:
                 sound.set_volume(volume)
             self._volume = volume
-            
+
         def _update_volume(self):
             for sound in self._pg_sounds:
-                sound.set_volume(self._volume*_internal._sound_volume)
-                
+                sound.set_volume(self._volume * _internal._sound_volume)
+
         def _stop(self):
             for sound in self._pg_sounds:
                 sound.stop()
-                
+
         def _play(self, stop, loops, fade):
             if stop:
                 for sound in self._pg_sounds:
@@ -695,7 +742,9 @@ void main() {
 
     class _StaticType:
         def __init__(self, *args, **kwargs):
-            raise PGLError(f"'{self.__class__.__name__}' is a static class and cannot be instantiated")
+            raise PGLError(
+                f"'{self.__class__.__name__}' is a static class and cannot be instantiated"
+            )
 
     class _WindowType(type):
         @property
@@ -719,8 +768,7 @@ void main() {
                 extra |= pygame.NOFRAME
             if v == "maximized":
                 v = pygame.display.get_desktop_sizes()[0]
-            pygame.display.set_mode(
-                v, pygame.OPENGL | pygame.DOUBLEBUF | extra)
+            pygame.display.set_mode(v, pygame.OPENGL | pygame.DOUBLEBUF | extra)
 
         @property
         def pixel_rect(self):
@@ -729,7 +777,7 @@ void main() {
         @property
         def center(self):
             w, h = Window.size
-            return Vec(w/2, h/2)
+            return Vec(w / 2, h / 2)
 
         @property
         def resizable(self):
@@ -744,7 +792,8 @@ void main() {
             if _internal._borderless:
                 extra |= pygame.NOFRAME
             pygame.display.set_mode(
-                Window.size, pygame.OPENGL | pygame.DOUBLEBUF | extra)
+                Window.size, pygame.OPENGL | pygame.DOUBLEBUF | extra
+            )
 
         @property
         def borderless(self):
@@ -759,7 +808,8 @@ void main() {
             if _internal._borderless:
                 extra |= pygame.NOFRAME
             pygame.display.set_mode(
-                Window.size, pygame.OPENGL | pygame.DOUBLEBUF | extra)
+                Window.size, pygame.OPENGL | pygame.DOUBLEBUF | extra
+            )
 
     class _TimeType(type):
         @property
@@ -786,7 +836,7 @@ void main() {
                 elif self.direction == RELEASE and not status:
                     return True
             elif self.type == MOUSE:
-                status = Frame.buttons[self.code-1]
+                status = Frame.buttons[self.code - 1]
                 if self.direction == PRESS and status:
                     return True
                 elif self.direction == RELEASE and not status:
@@ -833,17 +883,22 @@ void main() {
 
     class _RenderGroup:
         def __init__(self, shader, layer, static, sortmode):
-            self._shader, self._layer, self._static, self._sortmode = shader, layer, static, sortmode
+            self._shader, self._layer, self._static, self._sortmode = (
+                shader,
+                layer,
+                static,
+                sortmode,
+            )
             _internal._LayerGroup._set_render_group(layer, shader, self, static)
             self._reserved_len = 10
             self._entities = []
             self._dirty = False
-            
+
         def _reset(self):
             self._entities = []
             self._reserved_len = 10
             self._dirty = True
-        
+
         @staticmethod
         def _exist_create(layer, shader, static, sortmode):
             shader_group = _internal._layer_groups[layer]._shader_groups[shader]
@@ -853,7 +908,7 @@ void main() {
             else:
                 if not shader_group._dynamic_rg:
                     _internal._RenderGroup(shader, layer, static, sortmode)
-        
+
         @staticmethod
         def _get(layer, shader, static):
             shader_group = _internal._layer_groups[layer]._shader_groups[shader]
@@ -866,21 +921,24 @@ void main() {
             if not _internal._scene_init_complete:
                 return
             self._ibo = _internal._gl_context.buffer(
-                _internal._RenderGroup._rect_indices(self._reserved_len), dynamic=False)
+                _internal._RenderGroup._rect_indices(self._reserved_len), dynamic=False
+            )
             self._vbo = _internal._gl_context.buffer(
-                reserve=self._reserved_len*4*4*9, dynamic=True)
-            self._vao = _internal._gl_context.vertex_array(_internal._shaders[self._shader],
-                                                           [(self._vbo, "2f 4f 2f 1f",
-                                                             "vPos", "vCol", "vUV", "vTexID")],
-                                                           index_buffer=self._ibo)
+                reserve=self._reserved_len * 4 * 4 * 9, dynamic=True
+            )
+            self._vao = _internal._gl_context.vertex_array(
+                _internal._shaders[self._shader],
+                [(self._vbo, "2f 4f 2f 1f", "vPos", "vCol", "vUV", "vTexID")],
+                index_buffer=self._ibo,
+            )
 
         @staticmethod
         def _uvs_atlas(aw, ah, w, h, x, y):
             return [
-                (x/aw, y/ah),
-                ((x+w)/aw, y/ah),
-                (x/aw, (y+h)/ah),
-                ((x+w)/aw, (y+h)/ah),
+                (x / aw, y / ah),
+                ((x + w) / aw, y / ah),
+                (x / aw, (y + h) / ah),
+                ((x + w) / aw, (y + h) / ah),
             ]
 
         @staticmethod
@@ -888,8 +946,14 @@ void main() {
             res = []
             offset = 0
             for _ in range(amount):
-                res += [0+offset, 1+offset, 2+offset,
-                        2+offset, 1+offset, 3+offset]
+                res += [
+                    0 + offset,
+                    1 + offset,
+                    2 + offset,
+                    2 + offset,
+                    1 + offset,
+                    3 + offset,
+                ]
                 offset += 4
             return _np.fromiter(res, dtype=_np.uint32)
 
@@ -902,7 +966,7 @@ void main() {
 
         def _remove(self, entity):
             self._entities.remove(entity)
-            if self._reserved_len-len(self._entities) > 10:
+            if self._reserved_len - len(self._entities) > 10:
                 self._reserved_len -= 10
                 self._make_buffers()
             self._dirty = True
@@ -914,17 +978,19 @@ void main() {
                 entities = self._entities
                 if self._sortmode == TOPDOWN_SORT:
                     entities = sorted(
-                        self._entities, key=lambda x: x._meta_["rect"].bottom)
+                        self._entities, key=lambda x: x._meta_["rect"].bottom
+                    )
                 for e in entities:
                     if e._meta_["dirty"]:
-                        e._meta_[
-                            "render_data"] = _internal._RenderGroup._entity_render_data(e)
+                        e._meta_["render_data"] = (
+                            _internal._RenderGroup._entity_render_data(e)
+                        )
                         dirty = True
                     data += e._meta_["render_data"]
                 if not self._static or dirty or self._dirty:
-                    amount = self._reserved_len-len(self._entities)
+                    amount = self._reserved_len - len(self._entities)
                     if amount > 0:
-                        data.extend([0]*(amount*4*9))
+                        data.extend([0] * (amount * 4 * 9))
                     self._vbo.write(_np.fromiter(data, _np.float32))
             self._vao.render()
             self._dirty = False
@@ -936,25 +1002,29 @@ void main() {
             tx, ty, sx, sy = rect.left, rect.top, rect.w, rect.h
             if (angle := meta["angle"]) != 0:
                 a = math.radians(angle)
-                sx2, sy2 = sx/2, sy/2
-                cx, cy = (tx+sx2, ty+sy2)
+                sx2, sy2 = sx / 2, sy / 2
+                cx, cy = (tx + sx2, ty + sy2)
                 cos, sin = math.cos(a), math.sin(a)
-                sx2cos, sx2sin, sy2cos, sy2sin = sx2*cos, sx2*sin, sy2*cos, sy2*sin
+                sx2cos, sx2sin, sy2cos, sy2sin = (
+                    sx2 * cos,
+                    sx2 * sin,
+                    sy2 * cos,
+                    sy2 * sin,
+                )
                 pos0, pos1, pos2, pos3 = (
-                    (-sx2cos+sy2sin+cx, -sx2sin-sy2cos+cy),
-                    (sx2cos+sy2sin+cx, sx2sin-sy2cos+cy),
-                    (-sx2cos-sy2sin+cx, -sx2sin+sy2cos+cy),
-                    (sx2cos-sy2sin+cx, sx2sin+sy2cos+cy),
+                    (-sx2cos + sy2sin + cx, -sx2sin - sy2cos + cy),
+                    (sx2cos + sy2sin + cx, sx2sin - sy2cos + cy),
+                    (-sx2cos - sy2sin + cx, -sx2sin + sy2cos + cy),
+                    (sx2cos - sy2sin + cx, sx2sin + sy2cos + cy),
                 )
             else:
                 pos0, pos1, pos2, pos3 = (
                     (tx, ty),
                     (tx + sx, ty),
                     (tx, ty + sy),
-                    (tx + sx, ty + sy)
+                    (tx + sx, ty + sy),
                 )
-            uvs, flip = _internal._atlas["uvs"][meta[
-                "image"]], meta["flip"]
+            uvs, flip = _internal._atlas["uvs"][meta["image"]], meta["flip"]
             if flip[0]:
                 uvs = [uvs[1], uvs[0], uvs[3], uvs[2]]
             if flip[1]:
@@ -962,10 +1032,22 @@ void main() {
             uv0, uv1, uv2, uv3 = uvs
             color = meta["color"]
             return (
-                *pos0, *color, *uv0, 0,
-                *pos1, *color, *uv1, 0,
-                *pos2, *color, *uv2, 0,
-                *pos3, *color, *uv3, 0,
+                *pos0,
+                *color,
+                *uv0,
+                0,
+                *pos1,
+                *color,
+                *uv1,
+                0,
+                *pos2,
+                *color,
+                *uv2,
+                0,
+                *pos3,
+                *color,
+                *uv3,
+                0,
             )
 
     class _FontGroup:
@@ -976,7 +1058,7 @@ void main() {
             self._data = []
             self._dirty = False
             self._make_buffers()
-            
+
         def _reset(self):
             self._data = []
             self._reserved_len = 100
@@ -985,9 +1067,9 @@ void main() {
         def _update_render(self):
             if self._dirty:
                 self._dirty = False
-                amount = self._reserved_len*4*9-len(self._data)
+                amount = self._reserved_len * 4 * 9 - len(self._data)
                 if amount > 0:
-                    self._data.extend([0]*amount)
+                    self._data.extend([0] * amount)
                 self._vbo.write(_np.fromiter(self._data, _np.float32))
                 self._data = []
             self._vao.render()
@@ -996,17 +1078,20 @@ void main() {
             if not _internal._scene_init_complete:
                 return
             self._ibo = _internal._gl_context.buffer(
-                _internal._RenderGroup._rect_indices(self._reserved_len), dynamic=False)
+                _internal._RenderGroup._rect_indices(self._reserved_len), dynamic=False
+            )
             self._vbo = _internal._gl_context.buffer(
-                reserve=self._reserved_len*4*4*9, dynamic=True)
-            self._vao = _internal._gl_context.vertex_array(_internal._shaders[self._shader],
-                                                           [(self._vbo, "2f 4f 2f 1f",
-                                                             "vPos", "vCol", "vUV", "vTexID")],
-                                                           index_buffer=self._ibo)
+                reserve=self._reserved_len * 4 * 4 * 9, dynamic=True
+            )
+            self._vao = _internal._gl_context.vertex_array(
+                _internal._shaders[self._shader],
+                [(self._vbo, "2f 4f 2f 1f", "vPos", "vCol", "vUV", "vTexID")],
+                index_buffer=self._ibo,
+            )
 
         def _add_data(self, data):
             self._data += data
-            if len(self._data) >= self._reserved_len*4*9:
+            if len(self._data) >= self._reserved_len * 4 * 9:
                 self._reserved_len += 100
                 self._make_buffers()
             self._dirty = True
@@ -1019,27 +1104,50 @@ void main() {
                 (tx, ty),
                 (tx + sx, ty),
                 (tx, ty + sy),
-                (tx + sx, ty + sy)
+                (tx + sx, ty + sy),
             )
             uv0, uv1, uv2, uv3 = uvs
             return (
-                *pos0, *color, *uv0, 1,
-                *pos1, *color, *uv1, 1,
-                *pos2, *color, *uv2, 1,
-                *pos3, *color, *uv3, 1,
+                *pos0,
+                *color,
+                *uv0,
+                1,
+                *pos1,
+                *color,
+                *uv1,
+                1,
+                *pos2,
+                *color,
+                *uv2,
+                1,
+                *pos3,
+                *color,
+                *uv3,
+                1,
             )
 
         @staticmethod
-        def _render_check(font_name, position_name, color, layer, shader, max_width, align):
+        def _render_check(
+            font_name, position_name, color, layer, shader, max_width, align
+        ):
             if color is None:
                 color = (1, 1, 1, 1)
             if len(color) == 3:
                 color = (*color, 1)
             elif len(color) != 4:
                 raise PGLError("Text color must have 4 components")
-            if position_name not in ["center", "tl", "bl", "tr", "br", "ml", "mr", "mb", "mt"]:
-                raise PGLError(
-                    f"Invalid text position name '{position_name}'")
+            if position_name not in [
+                "center",
+                "tl",
+                "bl",
+                "tr",
+                "br",
+                "ml",
+                "mr",
+                "mb",
+                "mt",
+            ]:
+                raise PGLError(f"Invalid text position name '{position_name}'")
             if font_name not in _internal._fonts_data:
                 raise PGLError(f"Font '{font_name}' does not exist")
             if align not in ["center", "left", "right"]:
@@ -1049,7 +1157,7 @@ void main() {
             _internal._LayerGroup._exist_create(layer)
             font_group = _internal._FontGroup._exist_create(layer, shader)
             return color, _internal._fonts_data[font_name], font_group
-        
+
         @staticmethod
         def _exist_create(layer, shader):
             shader_group = _internal._layer_groups[layer]._shader_groups[shader]
@@ -1063,121 +1171,116 @@ void main() {
                 char[1] += position[0]
                 char[2] += position[1]
             elif position_name == "center":
-                char[1] += position[0]-w/2
-                char[2] += position[1]-h/2
+                char[1] += position[0] - w / 2
+                char[2] += position[1] - h / 2
             elif position_name == "tr":
-                char[1] += position[0]-w
+                char[1] += position[0] - w
                 char[2] += position[1]
             elif position_name == "bl":
                 char[1] += position[0]
-                char[2] += position[1]-h
+                char[2] += position[1] - h
             elif position_name == "br":
-                char[1] += position[0]-w
-                char[2] += position[1]-h
+                char[1] += position[0] - w
+                char[2] += position[1] - h
             elif position_name == "ml":
                 char[1] += position[0]
-                char[2] += position[1]-h/2
+                char[2] += position[1] - h / 2
             elif position_name == "mb":
-                char[1] += position[0]-w/2
-                char[2] += position[1]-h
+                char[1] += position[0] - w / 2
+                char[2] += position[1] - h
             elif position_name == "mr":
-                char[1] += position[0]-w
-                char[2] += position[1]-h/2
+                char[1] += position[0] - w
+                char[2] += position[1] - h / 2
             elif position_name == "mt":
-                char[1] += position[0]-w/2
+                char[1] += position[0] - w / 2
                 char[2] += position[1]
 
     class _LayerGroup:
         def __init__(self, layer):
             self._layer = layer
             self._shader_groups = {
-                shader:_internal._ShaderGroup(shader) for shader in _internal._SHADER_SOURCE.keys()
+                shader: _internal._ShaderGroup(shader)
+                for shader in _internal._SHADER_SOURCE.keys()
             }
-            
+
         def _exist_create(layer):
             if layer not in _internal._layer_groups:
                 _internal._layer_groups[layer] = _internal._LayerGroup(layer)
-            
+
         def _set_render_group(layer, shader, render_group, static):
             shader_group = _internal._layer_groups[layer]._shader_groups[shader]
             if static:
                 shader_group._static_rg = render_group
             else:
                 shader_group._dynamic_rg = render_group
-                
+
         def _set_font_group(layer, shader, font_group):
             shader_group = _internal._layer_groups[layer]._shader_groups[shader]
             shader_group._font_group = font_group
-            
+
         def _apply_reset():
             for _, layer_group in _internal._layer_groups.items():
                 for _, shader_group in layer_group._shader_groups.items():
                     shader_group._reset()
-                    
+
         def _apply_make_buffers():
             for _, layer_group in _internal._layer_groups.items():
                 for _, shader_group in layer_group._shader_groups.items():
                     shader_group._make_buffers()
-                    
+
         def _sorted_update_render():
-            for _, layer_group in sorted(_internal._layer_groups.items(), key=lambda lg: lg[0]):
+            for _, layer_group in sorted(
+                _internal._layer_groups.items(), key=lambda lg: lg[0]
+            ):
                 for _, shader_group in layer_group._shader_groups.items():
                     shader_group._update_render()
-        
+
     class _ShaderGroup:
         def __init__(self, shader):
             self._shader = shader
             self._dynamic_rg = None
             self._static_rg = None
             self._font_group = None
-            
+
         def _make_buffers(self):
             for g in [self._dynamic_rg, self._static_rg, self._font_group]:
                 if g:
                     g._make_buffers()
-            
+
         def _reset(self):
             for g in [self._dynamic_rg, self._static_rg, self._font_group]:
                 if g:
                     g._reset()
-            
+
         def _update_render(self):
             for g in [self._dynamic_rg, self._static_rg, self._font_group]:
                 if g:
                     g._update_render()
 
-    class _FRangeIterator:
-        def __init__(self, frange):
-            self._frange = frange
-            self._value = self._frange.start-self._frange.step
-            
-        def __next__(self):
-            self._value += self._frange.step
-            if self._value > self._frange.stop:
-                raise StopIteration
-            return self._value
-    
     class _SoundsType(type):
         @property
         def volume(self):
             return _internal._sound_volume
-            
+
         @volume.setter
         def volume(self, v):
             _internal._sound_volume = v
             for sound in _internal._sounds.values():
                 sound._update_volume()
-            
+
     class _MusicsType(type):
         @property
         def volume(self):
             return _internal._music_volume
-            
+
         @volume.setter
         def volume(self, v):
             _internal._music_volume = v
             if _internal._music_playing is not None:
-                pygame.mixer.music.set_volume(_internal._music_volume*_internal._musics[_internal._music_playing]["volume"])
+                pygame.mixer.music.set_volume(
+                    _internal._music_volume
+                    * _internal._musics[_internal._music_playing]["volume"]
+                )
 
         @property
         def playing(self):
@@ -1185,36 +1288,36 @@ void main() {
 
 
 class Sounds(metaclass=_internal._SoundsType):
-    def play(name, loops = 0, fade_ms=0, stop = False):
+    def play(name, loops=0, fade_ms=0, stop=False):
         if name not in _internal._sounds:
             raise PGLError(f"Sound '{name}' does not exist")
         _internal._sounds[name]._play(stop, loops, fade_ms)
-        
+
     def stop(name):
         if name not in _internal._sounds:
             raise PGLError(f"Sound '{name}' does not exist")
         _internal._sounds[name]._stop()
-        
+
     def set_sound_volume(name, volume):
         if name not in _internal._sounds:
             raise PGLError(f"Sound '{name}' does not exist")
         _internal._sounds[name]._volume = volume
         _internal._sounds[name]._update_volume()
-        
+
     def get_sound_volume(name):
         if name not in _internal._sounds:
             raise PGLError(f"Sound '{name}' does not exist")
         return _internal._sounds[name]._volume
-    
+
     def get_sound_objects(name):
         if name not in _internal._sounds:
             raise PGLError(f"Sound '{name}' does not exist")
         return list(_internal._sounds[name]._pg_sounds)
-    
+
     def add(name, volume, *paths):
         _internal._sounds[name] = _internal._SoundAsset(paths, volume)
-    
-    
+
+
 class Musics(metaclass=_internal._MusicsType):
     def play(name, loops=-1, start=0, fade_ms=0):
         if name not in _internal._musics:
@@ -1223,36 +1326,36 @@ class Musics(metaclass=_internal._MusicsType):
         pygame.mixer.music.unload()
         pygame.mixer.music.load(_internal._musics[name]["path"])
         pygame.mixer.music.play(loops, start, fade_ms)
-        
+
     def pause():
         if _internal._music_playing is None:
             raise PGLError("Cannot pause music if it's not playing")
         pygame.mixer.music.pause()
-        
+
     def resume():
         if _internal._music_playing is None:
             raise PGLError("Cannot resume music if it never started playing")
         pygame.mixer.music.unpause()
-        
+
     def stop():
         pygame.mixer.music.stop()
         _internal._music_playing = None
-        
+
     def set_music_volume(name, volume):
         if name not in _internal._musics:
             raise PGLError(f"Music '{name}' does not exist")
         _internal._musics[name]["volume"] = volume
         if _internal._music_playing == name:
-            pygame.mixer.music.set_volume(_internal._music_volume*volume)
-    
+            pygame.mixer.music.set_volume(_internal._music_volume * volume)
+
     def get_music_volume(name):
         if name not in _internal._musics:
             raise PGLError(f"Music '{name}' does not exist")
         return _internal._musics[name]["volume"]
-    
+
     def add(name, path, volume=1):
         _internal._musics[name] = {"volume": volume, "path": path}
-    
+
 
 class Font(_internal._StaticType):
     def clear(layer=0, shader=UI_SHADER):
@@ -1266,58 +1369,105 @@ class Font(_internal._StaticType):
         group._data = []
         group._dirty = True
 
-    def render_center(font_name, text, position, color=None, scale=1, layer=0, shader=UI_SHADER):
+    def render_center(
+        font_name, text, position, color=None, scale=1, layer=0, shader=UI_SHADER
+    ):
         color, data, font_group = _internal._FontGroup._render_check(
-            font_name, "center", color, layer, shader, 0, "center")
+            font_name, "center", color, layer, shader, 0, "center"
+        )
         x = y = w = h = 0
         all_chars = []
         for char in text:
             if f"{font_name}_{char}" not in _internal._font_atlas["uvs"]:
-                raise PGLError(f"Character '{char}' of font '{font_name}' was not registered")
-            cw = data["chars_w"][char]*scale
+                raise PGLError(
+                    f"Character '{char}' of font '{font_name}' was not registered"
+                )
+            cw = data["chars_w"][char] * scale
             all_chars.append([char, x, y, cw])
             x += cw
         w = x
-        h = y + data["height"]*scale
+        h = y + data["height"] * scale
         for char in all_chars:
-            font_group._add_data(_internal._FontGroup._char_data((char[1]+position[0]-w/2, char[2]+position[1]-h/2), (
-                char[3], data["height"]*scale), color, _internal._font_atlas["uvs"][f"{font_name}_{char[0]}"]))
+            font_group._add_data(
+                _internal._FontGroup._char_data(
+                    (char[1] + position[0] - w / 2, char[2] + position[1] - h / 2),
+                    (char[3], data["height"] * scale),
+                    color,
+                    _internal._font_atlas["uvs"][f"{font_name}_{char[0]}"],
+                )
+            )
         return Vec(w, h)
 
-    def render(font_name, text, position, position_name=TEXTPOS_CENTER, color=None, scale=1, layer=0, shader=UI_SHADER):
+    def render(
+        font_name,
+        text,
+        position,
+        position_name=TEXTPOS_CENTER,
+        color=None,
+        scale=1,
+        layer=0,
+        shader=UI_SHADER,
+    ):
         color, data, font_group = _internal._FontGroup._render_check(
-            font_name, position_name, color, layer, shader, 0, "center")
+            font_name, position_name, color, layer, shader, 0, "center"
+        )
         x = y = w = h = 0
         all_chars = []
         for char in text:
             if f"{font_name}_{char}" not in _internal._font_atlas["uvs"]:
-                raise PGLError(f"Character '{char}' of font '{font_name}' was not registered")
-            cw = data["chars_w"][char]*scale
+                raise PGLError(
+                    f"Character '{char}' of font '{font_name}' was not registered"
+                )
+            cw = data["chars_w"][char] * scale
             all_chars.append([char, x, y, cw])
             x += cw
         w = x
-        h = y + data["height"]*scale
+        h = y + data["height"] * scale
         for char in all_chars:
             _internal._FontGroup._char_pos(char, position_name, position, w, h)
-            font_group._add_data(_internal._FontGroup._char_data((char[1], char[2]), (
-                char[3], data["height"]*scale), color, _internal._font_atlas["uvs"][f"{font_name}_{char[0]}"]))
+            font_group._add_data(
+                _internal._FontGroup._char_data(
+                    (char[1], char[2]),
+                    (char[3], data["height"] * scale),
+                    color,
+                    _internal._font_atlas["uvs"][f"{font_name}_{char[0]}"],
+                )
+            )
         return Vec(w, h)
 
-    def render_lines(font_name, text, position, position_name=TEXTPOS_CENTER, max_width=0, color=None, align=ALIGN_CENTER, scale=1, layer=0, shader=UI_SHADER, words_intact=True):
+    def render_lines(
+        font_name,
+        text,
+        position,
+        position_name=TEXTPOS_CENTER,
+        max_width=0,
+        color=None,
+        align=ALIGN_CENTER,
+        scale=1,
+        layer=0,
+        shader=UI_SHADER,
+        words_intact=True,
+    ):
         color, data, font_group = _internal._FontGroup._render_check(
-            font_name, position_name, color, layer, shader, max_width, align)
+            font_name, position_name, color, layer, shader, max_width, align
+        )
         x = y = w = h = 0
         chars, lines, all_chars = [], [], []
         for char in text:
-            if char != "\n" and f"{font_name}_{char}" not in _internal._font_atlas["uvs"]:
-                raise PGLError(f"Character '{char}' of font '{font_name}' was not registered")
-            cw = data["chars_w"].get(char, 0)*scale
+            if (
+                char != "\n"
+                and f"{font_name}_{char}" not in _internal._font_atlas["uvs"]
+            ):
+                raise PGLError(
+                    f"Character '{char}' of font '{font_name}' was not registered"
+                )
+            cw = data["chars_w"].get(char, 0) * scale
             if char == "\n" or (x + cw > max_width and max_width > 0):
                 if (not words_intact and char != " ") or char == "\n":
                     if x > w:
                         w = x
                     x = 0
-                    y += data["height"]*scale
+                    y += data["height"] * scale
                     lines.append(chars)
                     all_chars += chars
                     chars = []
@@ -1330,23 +1480,29 @@ class Font(_internal._StaticType):
         if len(chars) > 0:
             all_chars += chars
             lines.append(chars)
-        h = y + data["height"]*scale
+        h = y + data["height"] * scale
         if align == "center":
             for line in lines:
                 lw = sum([c[3] for c in line])
-                offset = w/2-lw/2
+                offset = w / 2 - lw / 2
                 for c in line:
                     c[1] += offset
         elif align == "right":
             for line in lines:
                 lw = sum([c[3] for c in line])
-                offset = w-lw
+                offset = w - lw
                 for c in line:
                     c[1] += offset
         for char in all_chars:
             _internal._FontGroup._char_pos(char, position_name, position, w, h)
-            font_group._add_data(_internal._FontGroup._char_data((char[1], char[2]), (
-                char[3], data["height"]*scale), color, _internal._font_atlas["uvs"][f"{font_name}_{char[0]}"]))
+            font_group._add_data(
+                _internal._FontGroup._char_data(
+                    (char[1], char[2]),
+                    (char[3], data["height"] * scale),
+                    color,
+                    _internal._font_atlas["uvs"][f"{font_name}_{char[0]}"],
+                )
+            )
         return Vec(w, h)
 
 
@@ -1381,11 +1537,12 @@ class Light:
 
     def destroy(self):
         _internal._lights.remove(self)
-        
+
     def __str__(self):
         return f"Light({self.rect.center}, color={self.color}, range={self.rect.w}, intensity={self.intensity}, visible={self.visible})"
+
     __repr__ = __str__
-    
+
 
 class Binds(_internal._StaticType):
     def check_frame(name):
@@ -1402,22 +1559,24 @@ class Binds(_internal._StaticType):
         if name not in _internal._binds:
             raise PGLError(f"Bind {name} does not exist")
         bind = _internal._binds[name]
-        return _internal._parse_bind(bind.main), [_internal._parse_bind(alt) for alt in bind.alts]
-        
+        return _internal._parse_bind(bind.main), [
+            _internal._parse_bind(alt) for alt in bind.alts
+        ]
+
     def modify(name, main, *alts):
         if name not in _internal._binds:
             raise PGLError(f"Bind '{name}' does not exist")
         bind = _internal._binds[name]
         bind.main = _internal._parse_bind(main)
         bind.alts = [_internal._parse_bind(alt) for alt in alts]
-        
+
     def add(name, main, *alts):
         if name in _internal._binds:
             raise PGLError(f"Bind '{name}' already exists")
         main = _internal._parse_bind(main)
         alts = [_internal._parse_bind(alt) for alt in alts]
         _internal._binds[name] = _internal._Bind(main, *alts)
-        
+
     def remove(name):
         if name not in _internal._binds:
             raise PGLError(f"Bind {name} does not exist")
@@ -1434,11 +1593,11 @@ class Camera(_internal._StaticType):
     far_plane = 10000
 
     def screen_to_world(screen_pos):
-        direction = (screen_pos-Window.center)/Camera.zoom/(_internal._unit/2)
-        return direction+Camera.position
+        direction = (screen_pos - Window.center) / Camera.zoom / (_internal._unit / 2)
+        return direction + Camera.position
 
     def screen_to_ui(screen_pos):
-        return (screen_pos-Window.center)/(_internal._unit/2)
+        return (screen_pos - Window.center) / (_internal._unit / 2)
 
     def refresh():
         _internal._update_view()
@@ -1470,7 +1629,7 @@ class Time(_internal._StaticType, metaclass=_internal._TimeType):
     fps_limit = 0
     delta = 0
     scale = 1
-    time = pygame.time.get_ticks()/1000
+    time = pygame.time.get_ticks() / 1000
 
     def pause():
         global scale
@@ -1482,7 +1641,9 @@ class Time(_internal._StaticType, metaclass=_internal._TimeType):
 
 
 class Timer:
-    def __init__(self, cooldown, end_callback, start=True, *callback_args, **callback_kwargs):
+    def __init__(
+        self, cooldown, end_callback, start=True, *callback_args, **callback_kwargs
+    ):
         self.cooldown = cooldown
         self.end_callback = end_callback
         self.callback_args = callback_args
@@ -1504,37 +1665,96 @@ class Timer:
 
 
 class NoiseSettings:
-    def __init__(self, octaves=2, scale=0.08, activation = -0.5, activation_dir=NOISE_LT, type=NOISE_PERLIN_2D, seed=None, user_data=None, persistence=0.5, lacunarity=2):
+    def __init__(
+        self,
+        octaves=2,
+        scale=0.08,
+        activation=-0.5,
+        activation_dir=NOISE_LT,
+        type=NOISE_PERLIN_2D,
+        seed=None,
+        user_data=None,
+        persistence=0.5,
+        lacunarity=2,
+    ):
         if _internal._noise is None:
             try:
                 import noise
+
                 _internal._noise = noise
             except ModuleNotFoundError:
-                raise PGLError("To use the NoiseSettings utility you need to install the noise module")
+                raise PGLError(
+                    "To use the NoiseSettings utility you need to install the noise module"
+                )
         if seed is None:
             seed = random.randint(0, 9999)
-        self.octaves, self.scale, self.activation, self.activation_dir, self.seed, \
-            self.user_data, self.type, self.persistence, self.lacunarity = (octaves, scale, activation, 
-                                        activation_dir, seed, user_data, type, persistence, lacunarity)
-        
+        (
+            self.octaves,
+            self.scale,
+            self.activation,
+            self.activation_dir,
+            self.seed,
+            self.user_data,
+            self.type,
+            self.persistence,
+            self.lacunarity,
+        ) = (
+            octaves,
+            scale,
+            activation,
+            activation_dir,
+            seed,
+            user_data,
+            type,
+            persistence,
+            lacunarity,
+        )
+
     def get(self, coordinate, scale_mul=1):
         if self.type == NOISE_SIMPLEX_2D:
-            return _internal._noise.snoise2(coordinate*self.scale*scale_mul+self.seed, coordinate[1]*self.scale*scale_mul+self.seed,
-                                            self.octaves, self.persistence, self.lacunarity)
+            return _internal._noise.snoise2(
+                coordinate * self.scale * scale_mul + self.seed,
+                coordinate[1] * self.scale * scale_mul + self.seed,
+                self.octaves,
+                self.persistence,
+                self.lacunarity,
+            )
         elif self.type == NOISE_SIMPLEX_3D:
-            return _internal._noise.snoise3(coordinate[0]*self.scale*scale_mul+self.seed, coordinate[1]*self.scale*scale_mul+self.seed,
-                                            coordinate[2]*self.scale*scale_mul+self.seed, self.octaves, self.persistence, self.lacunarity)
+            return _internal._noise.snoise3(
+                coordinate[0] * self.scale * scale_mul + self.seed,
+                coordinate[1] * self.scale * scale_mul + self.seed,
+                coordinate[2] * self.scale * scale_mul + self.seed,
+                self.octaves,
+                self.persistence,
+                self.lacunarity,
+            )
         elif self.type == NOISE_PERLIN_1D:
-            return _internal._noise.pnoise1(coordinate*self.scale*scale_mul+self.seed, self.octaves, self.persistence, self.lacunarity)
+            return _internal._noise.pnoise1(
+                coordinate * self.scale * scale_mul + self.seed,
+                self.octaves,
+                self.persistence,
+                self.lacunarity,
+            )
         elif self.type == NOISE_PERLIN_2D:
-            return _internal._noise.pnoise2(coordinate[0]*self.scale*scale_mul+self.seed, coordinate[1]*self.scale*scale_mul+self.seed,
-                                            self.octaves, self.persistence, self.lacunarity)
+            return _internal._noise.pnoise2(
+                coordinate[0] * self.scale * scale_mul + self.seed,
+                coordinate[1] * self.scale * scale_mul + self.seed,
+                self.octaves,
+                self.persistence,
+                self.lacunarity,
+            )
         elif self.type == NOISE_PERLIN_3D:
-            return _internal._noise.pnoise3(coordinate[0]*self.scale*scale_mul+self.seed, coordinate[1]*self.scale*scale_mul+self.seed,
-                                            coordinate[2]*self.scale*scale_mul+self.seed, self.octaves, self.persistence, self.lacunarity)
+            return _internal._noise.pnoise3(
+                coordinate[0] * self.scale * scale_mul + self.seed,
+                coordinate[1] * self.scale * scale_mul + self.seed,
+                coordinate[2] * self.scale * scale_mul + self.seed,
+                self.octaves,
+                self.persistence,
+                self.lacunarity,
+            )
         else:
             raise PGLError(f"Noise type '{self.type}' is not supported")
-        
+
     def check(self, coordinate, scale_mul=1):
         value = self.get(coordinate, scale_mul)
         if self.activation_dir == NOISE_LT:
@@ -1542,7 +1762,9 @@ class NoiseSettings:
         elif self.activation_dir == NOISE_GT:
             return value >= self.activation
         else:
-            raise PGLError(f"Activation direction '{self.activation_dir}' is not supported")
+            raise PGLError(
+                f"Activation direction '{self.activation_dir}' is not supported"
+            )
 
 
 class Scene:
@@ -1558,8 +1780,7 @@ class Scene:
         if name not in _internal._scenes:
             raise PGLError(f"Scene {name} does not exist")
         if not _internal._scene_init_complete:
-            raise PGLError(
-                "Cannot load scene while a scene is already loading")
+            raise PGLError("Cannot load scene while a scene is already loading")
 
         _internal._tag_entities = {}
         _internal._update_entities = []
@@ -1577,23 +1798,20 @@ class Scene:
     def get():
         return _internal._scene
 
-    def init(self):
-        ...
+    def init(self): ...
 
-    def on_quit(self):
-        ...
+    def on_quit(self): ...
 
     def can_quit(self):
         return True
 
-    def update(self):
-        ...
+    def update(self): ...
 
-    def on_window_resize(self):
-        ...
-        
+    def on_window_resize(self): ...
+
     def __str__(self):
         return f"{self.name} Scene"
+
     __repr__ = __str__
 
 
@@ -1603,15 +1821,27 @@ class Entity:
 
     @staticmethod
     def with_tag(*tags):
-        sets = [_internal._tag_entities[tag]
-                for tag in tags if tag in _internal._tag_entities]
+        sets = [
+            _internal._tag_entities[tag]
+            for tag in tags
+            if tag in _internal._tag_entities
+        ]
         if len(sets) <= 0:
             return list()
         if len(sets) == 1:
             return list(sets[0])
         return list(sets[0].intersection(*sets[1:]))
 
-    def __init_subclass__(subclass, flags=None, tags=None, layer=0, size=None, shader=UNLIT_SHADER, image=None, flip=None):
+    def __init_subclass__(
+        subclass,
+        flags=None,
+        tags=None,
+        layer=0,
+        size=None,
+        shader=UNLIT_SHADER,
+        image=None,
+        flip=None,
+    ):
         if flags is None:
             flags = tuple()
         if tags is None:
@@ -1630,7 +1860,7 @@ class Entity:
             "shader": shader,
             "static": STATIC in flags,
             "image": image,
-            "flip": flip
+            "flip": flip,
         }
         if INVISIBLE in flags:
             return
@@ -1639,12 +1869,23 @@ class Entity:
             sortmode = TOPDOWN_SORT
         _internal._LayerGroup._exist_create(layer)
         _internal._RenderGroup._exist_create(layer, shader, STATIC in flags, sortmode)
-        
+
     @classmethod
-    def new(cls, position=None, size=None, angle=None, color=None, image=None, flip=None, containers=None, name="entity"):
+    def new(
+        cls,
+        position=None,
+        size=None,
+        angle=None,
+        color=None,
+        image=None,
+        flip=None,
+        containers=None,
+        name="entity",
+    ):
         if not hasattr(cls, "_meta_subclass_"):
             raise PGLError(
-                "Entity cannot be instantiated, you can only instantiate subclasses")
+                "Entity cannot be instantiated, you can only instantiate subclasses"
+            )
         new = cls()
         new.name = name
         metasub = cls._meta_subclass_
@@ -1674,7 +1915,9 @@ class Entity:
         if UPDATE in flags:
             _internal._update_entities.append(new)
         if INVISIBLE not in flags:
-            group = _internal._RenderGroup._get(metasub["layer"], metasub["shader"], STATIC in flags)
+            group = _internal._RenderGroup._get(
+                metasub["layer"], metasub["shader"], STATIC in flags
+            )
             group._add(new)
 
         new._meta_ = {
@@ -1689,7 +1932,7 @@ class Entity:
             "render_data": None,
             "conts": [],
             "update": UPDATE in flags,
-            "alive": True
+            "alive": True,
         }
         for cont in containers:
             cont.add(new)
@@ -1712,17 +1955,14 @@ class Entity:
         if self._meta_["group"] is not None:
             self._meta_["group"]._remove(self)
 
-    def update(self):
-        ...
+    def update(self): ...
 
-    def init(self):
-        ...
+    def init(self): ...
 
     def setup(self):
         return self
 
-    def on_destroy(self):
-        ...
+    def on_destroy(self): ...
 
     @property
     def tags(self):
@@ -1805,7 +2045,7 @@ class Entity:
     @property
     def rect(self):
         return self._meta_["rect"].copy()
-    
+
     @rect.setter
     def rect(self, v):
         self._meta_["rect"] = v.copy()
@@ -1817,7 +2057,7 @@ class Entity:
     @property
     def forward(self):
         return Vec(0, -1).rotate(self._meta_["angle"])
-    
+
     @property
     def alive(self):
         return self._meta_["alive"]
@@ -1830,6 +2070,7 @@ class Entity:
         if len(self.tags) > 0:
             return f"{self.__class__.__name__}(tags={self.tags})"
         return f"{self.__class__.__name__}"
+
     __repr__ = __str__
 
 
@@ -1888,15 +2129,19 @@ class Container:
 
     def __str__(self):
         return f"Container ({len(_internal._cont_entities[id(self)])} entities)"
+
     __repr__ = __str__
 
 
 class frange:
     def __init__(self, start, stop, step):
         self.start, self.stop, self.step = start, stop, step
-        
+
     def __iter__(self):
-        return _internal._FRangeIterator(self)
+        value = self.start
+        while value <= self.stop:
+            yield value
+            value += self.step
 
 
 def custom_image_loader(func):
@@ -1918,6 +2163,6 @@ def light_filter(func):
 def from_pg_color(color, alpha=True):
     color = pygame.Color(color)
     if alpha:
-        return (color.r/255, color.g/255, color.b/255, color.a/255)
+        return (color.r / 255, color.g / 255, color.b / 255, color.a / 255)
     else:
-        return (color.r/255, color.g/255, color.b/255)
+        return (color.r / 255, color.g / 255, color.b / 255)

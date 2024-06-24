@@ -2,11 +2,20 @@ import pathlib
 import pygame
 import shutil
 import json
-import sys
 import os
 
 
 class PGLError(RuntimeError): ...
+
+
+def start_app(do_print = True):
+    from pgl import app
+
+    if do_print:
+        print("Starting PGL Application")
+    app.main()
+    if do_print:
+        print("Program Finished")
 
 
 def get_pref_paths():
@@ -47,10 +56,9 @@ def get_projects_dir(check_exists=True):
 
     if check_exists:
         if not os.path.exists(projects_dir):
-            print(
+            raise PGLError(
                 f"Set projects directory '{projects_dir}' does not exist. Use the set_dir command to set a new one"
             )
-            sys.exit()
 
     return projects_dir
 
@@ -61,8 +69,7 @@ def get_project_path(project_path):
         projects_dir = get_projects_dir()
         new_path = f"{projects_dir}\\{project_path}"
         if not os.path.exists(new_path):
-            print(f"Nor '{project_path}' nor '{new_path}' exists")
-            sys.exit()
+            raise PGLError(f"Nor '{project_path}' nor '{new_path}' exists")
         return new_path
     return project_path
 
@@ -72,7 +79,7 @@ def run_project(project_path, do_print=True):
 
     out_path = f"{project_path}\\out.py"
     if not os.path.exists(out_path):
-        print(f"Project '{project_path}' does not exist or was not compiled")
+        raise PGLError(f"Project '{project_path}' does not exist or was not compiled")
 
     if do_print:
         print("Running project")
@@ -104,16 +111,14 @@ def build_project(project_path, do_print=True):
                 with open(path, "r") as file:
                     file_data = file.read()
                     if "from prelude import *" not in file_data:
-                        print(
+                        raise PGLError(
                             f"Script '{file_name}' does not contain 'from prelude import *' which is expected. If you typed it any differently, correct it"
                         )
-                        sys.exit()
                     file_data = file_data.replace("from prelude import *", "")
                     out_data += f"\n# SCRIPT {file_name}\n\n{file_data}"
 
     if not os.path.exists(config_path):
-        print("Could not find config.json in project")
-        sys.exit()
+        raise PGLError("Could not find config.json in project")
 
     with open(config_path, "r") as config_file:
         config = json.load(config_file)
@@ -135,17 +140,16 @@ def build_project(project_path, do_print=True):
 
 def create_project(project_name, do_print=True):
     if "\\" in project_name or "/" in project_name:
-        print("New project name should be a directory name, not a path")
-        sys.exit()
+        raise PGLError("New project name should be a directory name, not a path")
 
     project_path = get_projects_dir() + f"\\{project_name}\\"
     pgl_path, runtime_path, prelude_path = get_pgl_paths()
 
-    if os.path.exists(project_path):
-        print("Project already exists")
-        return
+    if os.path.exists(project_path) and len(os.listdir(project_path)) > 0:
+        raise PGLError("Project already exists")
 
-    os.mkdir(project_path)
+    if not os.path.exists(project_path):
+        os.mkdir(project_path)
     os.mkdir(project_path + "assets")
     os.mkdir(project_path + "main")
 
@@ -154,7 +158,7 @@ def create_project(project_name, do_print=True):
             "from prelude import *\nimport typing\nif typing.TYPE_CHECKING:\n\t# import your files\n\t...\n\n\nclass Main(Scene):\n\tdef init(self):\n\t\t...\n\n\tdef update(self):\n\t\t...\n"
         )
     with open(project_path + "ruff.toml", "w") as toml_file:
-        toml_file.writable('ignore = ["F403", "F405"]')
+        toml_file.write('ignore = ["F403", "F405"]')
     with open(project_path + "config.json", "w") as config_file:
         config_file.write("""
 {
@@ -172,7 +176,6 @@ def create_project(project_name, do_print=True):
             "path": null,
             "bitmap-size": 200,
             "base-scale": 0.5,
-            "extra-chars": "òàèì",
             "bold": true
         }
     },
@@ -194,6 +197,7 @@ def create_project(project_name, do_print=True):
 
 
 def set_directory(projects_dir_path, check_exists=True, do_print=True):
+    """Set the projects directory in the userdata.json file"""
     pref_path, data_path, default_projects_dir = get_pref_paths()
     if projects_dir_path == "default":
         projects_dir_path = default_projects_dir
@@ -202,11 +206,17 @@ def set_directory(projects_dir_path, check_exists=True, do_print=True):
         projects_dir_path = os.path.abspath(projects_dir_path)
 
     if check_exists and not os.path.exists(projects_dir_path):
-        print(f"Cannot set projects dir '{projects_dir_path}' as it does not exist")
-        sys.exit()
+        raise PGLError(f"Cannot set projects dir '{projects_dir_path}' as it does not exist")
 
     with open(data_path, "w") as file:
         json.dump({"projects_dir": projects_dir_path}, file)
 
     if do_print:
         print(f"Successfully set the projects directory to '{projects_dir_path}'")
+
+def list_projects(do_print = True):
+    projects_dir = get_projects_dir(True)
+    files =  [file for file in os.listdir(projects_dir) if os.path.isdir(projects_dir+"\\"+file)]
+    if do_print:
+        print(f"Existing projects: {','.join(files)}")
+    return files
