@@ -15,7 +15,7 @@ The best methods to override are `init()` and `update()`. <br>
 update is called every frame, after the timer calls and before any entity update.<br>
 The init is called only once, immediately after the scene is loaded which is the best place to create some of your enities.<br>
 
-You can also override `quit()`, called when the window is closing and `on_window_resize()` called when the window resizes (useful for UI anchoring). Finally, the `can_quit()` method should return weather the window _can_ close when the user presses X (`Window.quit()` skips this call)
+You can also override `quit()`, called when the window is closing and `on_window_resize()` called when the window resizes (useful for UI anchoring). Finally, the `can_quit()` method should return whether the window _can_ close when the user presses X (`Window.quit()` skips this call)
 
 ```py
 class Main(Scene):
@@ -56,7 +56,7 @@ Entities with the same layer & shader will be rendered at the same time as a mes
 
 With the entity you get access to this non-overridable methods:
 
-- `YourEntity.new()`: Create a new entity of this type. Parameters are self explainatory. If values are emitted the defaults from the entity class notation will be used.
+- `YourEntity.new()`: Create a new entity of this type. Parameters are self explainatory. If some values are emitted the defaults from the entity class notation will be used.
 - `Entity.with_tag(*tags)`: Return all entities with the given tags
 - `destroy()` wipe the entity out of existence removing all references to it
 
@@ -77,8 +77,10 @@ And you also have properties:<br>
 - image: name of a loaded image
 - flip: `tuple[bool, bool]` where the first bool is x and the second is y
 - tags: `tuple[str]`, read-only
+- name: `str`
 - containers: `list` of containers the entity is in, read-only
 - forward: the `Vec(0, -1)` rotated by the angle
+- alive: `bool` stating whether the entity was destroyed or not
 
 ## NOTE:
 

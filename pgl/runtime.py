@@ -9,7 +9,10 @@ import sys
 import os
 import random
 import math
+import typing as typing
 # todo: particles, collision
+
+class PGLError(RuntimeError): ...
 
 Rect = pygame.FRect
 Vec = pygame.Vector2
@@ -72,6 +75,11 @@ class _internal:
     _lights = []
     _fonts_data = {}
     _noise = None
+    _sounds = {}
+    _musics = {}
+    _music_playing = None
+    _sound_volume = 1
+    _music_volume = 1
     _atlas = {
         "ID": 0,
         "surfaces": {},
@@ -303,8 +311,8 @@ void main() {
                     alts = []
                     main_bind = _internal._parse_bind(data)
                 else:
-                    if not "main" in data:
-                        raise RuntimeError(
+                    if "main" not in data:
+                        raise PGLError(
                             f"Bind {name} must specify a main bind code")
                     main_bind = _internal._parse_bind(data["main"])
                     alts = []
@@ -318,16 +326,18 @@ void main() {
                 Time.fps_limit = max(0, config["game"]["framerate-limit"])
             if "max-lights" in config["game"]:
                 if not isinstance(config["game"]["max-lights"], int):
-                    raise RuntimeError("Max lights value must be an integer")
+                    raise PGLError("Max lights value must be an integer")
                 _internal._max_lights = max(0, config["game"]["max-lights"])
                 if _internal._max_lights > 145:
-                    raise RuntimeError(f"Max lights value must be <= 145")
+                    raise PGLError("Max lights value must be <= 145")
             if "ambient-light" in config["game"]:
                 _internal._ambient_light = config["game"]["ambient-light"]
 
-        _internal._load_images(config["project-name"])
-        _internal._load_fonts(
-            config["fonts"] if "fonts" in config else {}, config["project-name"])
+        _internal._load_images(config["project-path"])
+        if "fonts" in config:
+            _internal._load_fonts(config["fonts"], config["project-path"])
+        if "sounds" in config:
+            _internal._load_sounds(config["sounds"], config["project-path"])
 
         for name, data in _internal._SHADER_SOURCE.items():
             fragment_data = data["frag"].replace(
@@ -346,9 +356,51 @@ void main() {
         if "game" in config and "start-scene" in config["game"]:
             Scene.load(config["game"]["start-scene"])
         else:
-            raise RuntimeError(
-                f"game:start-scene entry missing in config.json")
+            raise PGLError(
+                "game:start-scene entry missing in config.json")
         _internal._scene.on_window_resize()
+        
+    def _load_sounds(sounds, project_path):
+        if not isinstance(sounds, dict):
+            raise PGLError("Sounds entry of config.json must be a dictionary")
+        for name, data in sounds.items():
+            if not isinstance(data, dict):
+                raise PGLError("Sound entry of config.json:sounds must be a dictionary")
+            volume, ext, music = 1, "ogg", False
+            if "volume" in data:
+                volume = data["volume"]
+            if "ext" in data:
+                ext = data["ext"]
+            if "music" in data:
+                music = data["music"]
+            if music and ext == "folder":
+                raise PGLError("Sound with ext folder can't be music")
+            sounds = []
+            for dirpath, subfolders, files in os.walk(f"{project_path}assets/"):
+                found = False
+                if ext == "folder":
+                    for folder in subfolders:
+                        if folder == name:
+                            for fileinfolder in os.listdir(f"{dirpath}/{folder}"):
+                                sounds.append(f"{dirpath}/{folder}/{fileinfolder}")
+                            found = True
+                            break
+                else:
+                    for filename in files:
+                        if filename == f"{name}.{ext}":
+                            sounds.append(f"{dirpath}/{filename}")
+                            found = True
+                            break
+                if found:
+                    break
+            if len(sounds) == 0:
+                if ext == "folder":
+                    raise PGLError(f"Sound folder {name} was not found. Did you assign the wrong extension?")
+                raise PGLError(f"Sound {name}.{ext} was not found. Did you forget to assign the correct extension?")
+            if music:
+                _internal._musics[name] = {"path": sounds[0], "volume": volume}
+            else:
+                _internal._sounds[name] = _internal._SoundAsset(sounds, volume)
         
     def _parse_bind(data):
         if isinstance(data, _internal._BindCode):
@@ -359,7 +411,7 @@ void main() {
                 ret.append(RELEASE)
             return ret
         if not isinstance(data, list):
-            raise RuntimeError(f"Bind code data must be a list with the code as the first element and optional MOUSE and RELEASE flags as the other elements")
+            raise PGLError("Bind code data must be a list with the code as the first element and optional MOUSE and RELEASE flags as the other elements")
         code, type_, dir_ = data[0], KEYBOARD, PRESS
         if isinstance(code, str):
             code = getattr(pygame, code)
@@ -369,9 +421,13 @@ void main() {
             dir_ = RELEASE
         return _internal._BindCode(type_, code, dir_)
 
-    def _load_fonts(fonts_data, project_name):
+    def _load_fonts(fonts_data, project_path):
         surfaces = _internal._font_atlas["surfaces"]
+        if not isinstance(fonts_data, dict):
+            raise PGLError("Fonts entry of config.json must be a dictionary")
         for name, udata in fonts_data.items():
+            if not isinstance(udata, dict):
+                raise PGLError("Font entry of config.json:fonts must be a dictionary")
             font_func = pygame.Font
             font_path = None
             bitmap_size = 100
@@ -379,7 +435,7 @@ void main() {
                 bitmap_size = udata["bitmap-size"]
             if "path" in udata:
                 real_path = _path.Path(
-                    f"projects/{project_name}/assets/{udata['path']}")
+                    f"{project_path}assets/{udata['path']}")
                 if real_path.exists():
                     font_path = real_path
                 else:
@@ -421,20 +477,20 @@ void main() {
         _internal._samplers_amount += 1
         _internal._build_atlas(_internal._font_atlas)
 
-    def _load_images(project_name):
+    def _load_images(project_path):
         square = pygame.Surface((10, 10))
         square.fill("white")
         surfaces = _internal._atlas["surfaces"]
         surfaces["square"] = square
 
-        for dirpath, _, files in os.walk(f"projects/{project_name}/assets"):
+        for dirpath, _, files in os.walk(f"{project_path}assets"):
             for file in files:
                 file = _path.Path(dirpath+"/"+file)
                 if not file.stem.startswith("ignore"):
                     try:
                         surf = pygame.image.load(str(file)).convert_alpha()
                         surfaces[file.stem] = surf
-                    except:
+                    except Exception:
                         pass
         for func in _internal._custom_image_loaders:
             surfaces.update(func())
@@ -476,7 +532,7 @@ void main() {
             main_surf.blit(surf, (x, y))
         if False:
             pygame.image.save(
-                main_surf, f"test.png" if data["ID"] == 0 else f"fonttest.png")
+                main_surf, "test.png" if data["ID"] == 0 else "fonttest.png")
         data["texture"] = _internal._gl_context.texture(main_surf.get_size(), 4,
                                                         pygame.image.tobytes(main_surf, "RGBA", False))
         data["texture"].filter = (_mgl.NEAREST, _mgl.NEAREST)
@@ -488,7 +544,7 @@ void main() {
         while True:
             _internal._update_main()
             if len(_internal._scene.clear_color) != 4:
-                raise RuntimeError(f"Scene clear color must have 4 components")
+                raise PGLError("Scene clear color must have 4 components")
             _internal._gl_context.clear(*_internal._scene.clear_color)
 
             for event in Frame.events:
@@ -519,7 +575,7 @@ void main() {
 
             pygame.display.flip()
             if Time.scale < 0:
-                raise RuntimeError("Time scale must be positive")
+                raise PGLError("Time scale must be positive")
             Time.delta = (_internal._clock.tick_busy_loop(
                 Time.fps_limit)/1000)*Time.scale
             Time.time += Time.delta
@@ -536,7 +592,7 @@ void main() {
         Frame.mouse_wheel = Vec()
 
         if Camera.zoom <= 0:
-            raise RuntimeError("Camera zoom must be greater than zero")
+            raise PGLError("Camera zoom must be greater than zero")
 
         _internal._update_view()
         _internal._upload_samplers()
@@ -613,9 +669,33 @@ void main() {
     def _default_light_filter(light):
         return light.visible and light.rect.colliderect(Camera.rect)
 
+    class _SoundAsset:
+        def __init__(self, paths, volume):
+            self._pg_sounds = [pygame.mixer.Sound(path) for path in paths]
+            for sound in self._pg_sounds:
+                sound.set_volume(volume)
+            self._volume = volume
+            
+        def _update_volume(self):
+            for sound in self._pg_sounds:
+                sound.set_volume(self._volume*_internal._sound_volume)
+                
+        def _stop(self):
+            for sound in self._pg_sounds:
+                sound.stop()
+                
+        def _play(self, stop, loops, fade):
+            if stop:
+                for sound in self._pg_sounds:
+                    sound.stop()
+            if len(self._pg_sounds) > 1:
+                self._pg_sounds[0].play(loops, fade_ms=fade)
+                return
+            random.choice(self._pg_sounds).play(loops, fade_ms=fade)
+
     class _StaticType:
         def __init__(self, *args, **kwargs):
-            raise RuntimeError(f"'{self.__class__.__name__}' is a static class and cannot be instantiated")
+            raise PGLError(f"'{self.__class__.__name__}' is a static class and cannot be instantiated")
 
     class _WindowType(type):
         @property
@@ -956,16 +1036,16 @@ void main() {
             if len(color) == 3:
                 color = (*color, 1)
             elif len(color) != 4:
-                raise RuntimeError(f"Text color must have 4 components")
+                raise PGLError("Text color must have 4 components")
             if position_name not in ["center", "tl", "bl", "tr", "br", "ml", "mr", "mb", "mt"]:
-                raise RuntimeError(
+                raise PGLError(
                     f"Invalid text position name '{position_name}'")
-            if not font_name in _internal._fonts_data:
-                raise RuntimeError(f"Font '{font_name}' does not exist")
+            if font_name not in _internal._fonts_data:
+                raise PGLError(f"Font '{font_name}' does not exist")
             if align not in ["center", "left", "right"]:
-                raise RuntimeError(f"Invalid text alignment '{align}'")
+                raise PGLError(f"Invalid text alignment '{align}'")
             if max_width < 0:
-                raise RuntimeError(f"Max text width must be >= 0")
+                raise PGLError("Max text width must be >= 0")
             _internal._LayerGroup._exist_create(layer)
             font_group = _internal._FontGroup._exist_create(layer, shader)
             return color, _internal._fonts_data[font_name], font_group
@@ -1066,6 +1146,113 @@ void main() {
                 if g:
                     g._update_render()
 
+    class _FRangeIterator:
+        def __init__(self, frange):
+            self._frange = frange
+            self._value = self._frange.start-self._frange.step
+            
+        def __next__(self):
+            self._value += self._frange.step
+            if self._value > self._frange.stop:
+                raise StopIteration
+            return self._value
+    
+    class _SoundsType(type):
+        @property
+        def volume(self):
+            return _internal._sound_volume
+            
+        @volume.setter
+        def volume(self, v):
+            _internal._sound_volume = v
+            for sound in _internal._sounds.values():
+                sound._update_volume()
+            
+    class _MusicsType(type):
+        @property
+        def volume(self):
+            return _internal._music_volume
+            
+        @volume.setter
+        def volume(self, v):
+            _internal._music_volume = v
+            if _internal._music_playing is not None:
+                pygame.mixer.music.set_volume(_internal._music_volume*_internal._musics[_internal._music_playing]["volume"])
+
+        @property
+        def playing(self):
+            return _internal._music_playing
+
+
+class Sounds(metaclass=_internal._SoundsType):
+    def play(name, loops = 0, fade_ms=0, stop = False):
+        if name not in _internal._sounds:
+            raise PGLError(f"Sound '{name}' does not exist")
+        _internal._sounds[name]._play(stop, loops, fade_ms)
+        
+    def stop(name):
+        if name not in _internal._sounds:
+            raise PGLError(f"Sound '{name}' does not exist")
+        _internal._sounds[name]._stop()
+        
+    def set_sound_volume(name, volume):
+        if name not in _internal._sounds:
+            raise PGLError(f"Sound '{name}' does not exist")
+        _internal._sounds[name]._volume = volume
+        _internal._sounds[name]._update_volume()
+        
+    def get_sound_volume(name):
+        if name not in _internal._sounds:
+            raise PGLError(f"Sound '{name}' does not exist")
+        return _internal._sounds[name]._volume
+    
+    def get_sound_objects(name):
+        if name not in _internal._sounds:
+            raise PGLError(f"Sound '{name}' does not exist")
+        return list(_internal._sounds[name]._pg_sounds)
+    
+    def add(name, volume, *paths):
+        _internal._sounds[name] = _internal._SoundAsset(paths, volume)
+    
+    
+class Musics(metaclass=_internal._MusicsType):
+    def play(name, loops=-1, start=0, fade_ms=0):
+        if name not in _internal._musics:
+            raise PGLError(f"Music '{name}' does not exist")
+        pygame.mixer.music.stop()
+        pygame.mixer.music.unload()
+        pygame.mixer.music.load(_internal._musics[name]["path"])
+        pygame.mixer.music.play(loops, start, fade_ms)
+        
+    def pause():
+        if _internal._music_playing is None:
+            raise PGLError("Cannot pause music if it's not playing")
+        pygame.mixer.music.pause()
+        
+    def resume():
+        if _internal._music_playing is None:
+            raise PGLError("Cannot resume music if it never started playing")
+        pygame.mixer.music.unpause()
+        
+    def stop():
+        pygame.mixer.music.stop()
+        _internal._music_playing = None
+        
+    def set_music_volume(name, volume):
+        if name not in _internal._musics:
+            raise PGLError(f"Music '{name}' does not exist")
+        _internal._musics[name]["volume"] = volume
+        if _internal._music_playing == name:
+            pygame.mixer.music.set_volume(_internal._music_volume*volume)
+    
+    def get_music_volume(name):
+        if name not in _internal._musics:
+            raise PGLError(f"Music '{name}' does not exist")
+        return _internal._musics[name]["volume"]
+    
+    def add(name, path, volume=1):
+        _internal._musics[name] = {"volume": volume, "path": path}
+    
 
 class Font(_internal._StaticType):
     def clear(layer=0, shader=UI_SHADER):
@@ -1085,8 +1272,8 @@ class Font(_internal._StaticType):
         x = y = w = h = 0
         all_chars = []
         for char in text:
-            if not f"{font_name}_{char}" in _internal._font_atlas["uvs"]:
-                raise RuntimeError(f"Character '{char}' of font '{font_name}' was not registered")
+            if f"{font_name}_{char}" not in _internal._font_atlas["uvs"]:
+                raise PGLError(f"Character '{char}' of font '{font_name}' was not registered")
             cw = data["chars_w"][char]*scale
             all_chars.append([char, x, y, cw])
             x += cw
@@ -1103,8 +1290,8 @@ class Font(_internal._StaticType):
         x = y = w = h = 0
         all_chars = []
         for char in text:
-            if not f"{font_name}_{char}" in _internal._font_atlas["uvs"]:
-                raise RuntimeError(f"Character '{char}' of font '{font_name}' was not registered")
+            if f"{font_name}_{char}" not in _internal._font_atlas["uvs"]:
+                raise PGLError(f"Character '{char}' of font '{font_name}' was not registered")
             cw = data["chars_w"][char]*scale
             all_chars.append([char, x, y, cw])
             x += cw
@@ -1122,8 +1309,8 @@ class Font(_internal._StaticType):
         x = y = w = h = 0
         chars, lines, all_chars = [], [], []
         for char in text:
-            if char != "\n" and not f"{font_name}_{char}" in _internal._font_atlas["uvs"]:
-                raise RuntimeError(f"Character '{char}' of font '{font_name}' was not registered")
+            if char != "\n" and f"{font_name}_{char}" not in _internal._font_atlas["uvs"]:
+                raise PGLError(f"Character '{char}' of font '{font_name}' was not registered")
             cw = data["chars_w"].get(char, 0)*scale
             if char == "\n" or (x + cw > max_width and max_width > 0):
                 if (not words_intact and char != " ") or char == "\n":
@@ -1168,7 +1355,7 @@ class Light:
         self.rect = Rect(0, 0, range, range).move_to(center=position)
         self.color = color
         if len(self.color) > 3:
-            raise RuntimeError("Light color must not contain alpha values")
+            raise PGLError("Light color must not contain alpha values")
         self.intensity = intensity
         self.visible = visible
         _internal._lights.append(self)
@@ -1203,37 +1390,37 @@ class Light:
 class Binds(_internal._StaticType):
     def check_frame(name):
         if name not in _internal._binds:
-            raise RuntimeError(f"Bind {name} does not exist")
+            raise PGLError(f"Bind {name} does not exist")
         return _internal._binds[name]._check_frame()
 
     def check_event(name):
         if name not in _internal._binds:
-            raise RuntimeError(f"Bind {name} does not exist")
+            raise PGLError(f"Bind {name} does not exist")
         return _internal._binds[name]._check_event()
 
     def get(name):
         if name not in _internal._binds:
-            raise RuntimeError(f"Bind {name} does not exist")
+            raise PGLError(f"Bind {name} does not exist")
         bind = _internal._binds[name]
         return _internal._parse_bind(bind.main), [_internal._parse_bind(alt) for alt in bind.alts]
         
     def modify(name, main, *alts):
         if name not in _internal._binds:
-            raise RuntimeError(f"Bind '{name}' does not exist")
+            raise PGLError(f"Bind '{name}' does not exist")
         bind = _internal._binds[name]
         bind.main = _internal._parse_bind(main)
         bind.alts = [_internal._parse_bind(alt) for alt in alts]
         
     def add(name, main, *alts):
         if name in _internal._binds:
-            raise RuntimeError(f"Bind '{name}' already exists")
+            raise PGLError(f"Bind '{name}' already exists")
         main = _internal._parse_bind(main)
         alts = [_internal._parse_bind(alt) for alt in alts]
         _internal._binds[name] = _internal._Bind(main, *alts)
         
     def remove(name):
         if name not in _internal._binds:
-            raise RuntimeError(f"Bind {name} does not exist")
+            raise PGLError(f"Bind {name} does not exist")
         _internal._binds.pop(name)
 
 
@@ -1323,7 +1510,7 @@ class NoiseSettings:
                 import noise
                 _internal._noise = noise
             except ModuleNotFoundError:
-                raise RuntimeError(f"To use the NoiseSettings utility you need to install the noise module")
+                raise PGLError("To use the NoiseSettings utility you need to install the noise module")
         if seed is None:
             seed = random.randint(0, 9999)
         self.octaves, self.scale, self.activation, self.activation_dir, self.seed, \
@@ -1346,7 +1533,7 @@ class NoiseSettings:
             return _internal._noise.pnoise3(coordinate[0]*self.scale*scale_mul+self.seed, coordinate[1]*self.scale*scale_mul+self.seed,
                                             coordinate[2]*self.scale*scale_mul+self.seed, self.octaves, self.persistence, self.lacunarity)
         else:
-            raise RuntimeError(f"Noise type '{self.type}' is not supported")
+            raise PGLError(f"Noise type '{self.type}' is not supported")
         
     def check(self, coordinate, scale_mul=1):
         value = self.get(coordinate, scale_mul)
@@ -1355,7 +1542,7 @@ class NoiseSettings:
         elif self.activation_dir == NOISE_GT:
             return value >= self.activation
         else:
-            raise RuntimeError(f"Activation direction '{self.activation_dir}' is not supported")
+            raise PGLError(f"Activation direction '{self.activation_dir}' is not supported")
 
 
 class Scene:
@@ -1369,9 +1556,9 @@ class Scene:
     @staticmethod
     def load(name):
         if name not in _internal._scenes:
-            raise RuntimeError(f"Scene {name} does not exist")
+            raise PGLError(f"Scene {name} does not exist")
         if not _internal._scene_init_complete:
-            raise RuntimeError(
+            raise PGLError(
                 "Cannot load scene while a scene is already loading")
 
         _internal._tag_entities = {}
@@ -1418,7 +1605,11 @@ class Entity:
     def with_tag(*tags):
         sets = [_internal._tag_entities[tag]
                 for tag in tags if tag in _internal._tag_entities]
-        return sets[0].intersection(*sets[1:])
+        if len(sets) <= 0:
+            return list()
+        if len(sets) == 1:
+            return list(sets[0])
+        return list(sets[0].intersection(*sets[1:]))
 
     def __init_subclass__(subclass, flags=None, tags=None, layer=0, size=None, shader=UNLIT_SHADER, image=None, flip=None):
         if flags is None:
@@ -1450,11 +1641,12 @@ class Entity:
         _internal._RenderGroup._exist_create(layer, shader, STATIC in flags, sortmode)
         
     @classmethod
-    def new(cls, position=None, size=None, angle=None, color=None, image=None, flip=None, containers=None):
+    def new(cls, position=None, size=None, angle=None, color=None, image=None, flip=None, containers=None, name="entity"):
         if not hasattr(cls, "_meta_subclass_"):
-            raise RuntimeError(
-                f"Entity cannot be instantiated, you can only instantiate subclasses")
+            raise PGLError(
+                "Entity cannot be instantiated, you can only instantiate subclasses")
         new = cls()
+        new.name = name
         metasub = cls._meta_subclass_
         flags = metasub["flags"]
         if position is None:
@@ -1476,12 +1668,12 @@ class Entity:
         group = None
 
         for tag in metasub["tags"]:
-            if not tag in _internal._tag_entities:
+            if tag not in _internal._tag_entities:
                 _internal._tag_entities[tag] = set()
             _internal._tag_entities[tag].add(new)
         if UPDATE in flags:
             _internal._update_entities.append(new)
-        if not INVISIBLE in flags:
+        if INVISIBLE not in flags:
             group = _internal._RenderGroup._get(metasub["layer"], metasub["shader"], STATIC in flags)
             group._add(new)
 
@@ -1496,7 +1688,8 @@ class Entity:
             "dirty": True,
             "render_data": None,
             "conts": [],
-            "update": UPDATE in flags
+            "update": UPDATE in flags,
+            "alive": True
         }
         for cont in containers:
             cont.add(new)
@@ -1504,8 +1697,11 @@ class Entity:
         return new
 
     def destroy(self):
+        if not self._meta_["alive"]:
+            return
         self.on_destroy()
         self._meta_["dirty"] = True
+        self._meta_["alive"] = False
         for tag in self._meta_["tags"]:
             if self in _internal._tag_entities[tag]:
                 _internal._tag_entities[tag].remove(self)
@@ -1574,7 +1770,7 @@ class Entity:
         if len(v) == 3:
             v = (*v, 1)
         elif len(v) != 4:
-            raise RuntimeError(f"Color value must have 3 or 4 components")
+            raise PGLError("Color value must have 3 or 4 components")
         self._meta_["color"] = v
         self._meta_["dirty"] = True
         if self._meta_subclass_["static"] and (g := self._meta_["group"]):
@@ -1589,7 +1785,7 @@ class Entity:
         if v is None:
             v = "square"
         elif v not in _internal._atlas["uvs"]:
-            raise RuntimeError(f"Image {v} does not exist")
+            raise PGLError(f"Image {v} does not exist")
         self._meta_["image"] = v
         self._meta_["dirty"] = True
         if self._meta_subclass_["static"] and (g := self._meta_["group"]):
@@ -1621,9 +1817,19 @@ class Entity:
     @property
     def forward(self):
         return Vec(0, -1).rotate(self._meta_["angle"])
+    
+    @property
+    def alive(self):
+        return self._meta_["alive"]
 
     def __str__(self):
-        return f"{self.__class__.__name__}(tags={self.tags})"
+        if self.name != "entity":
+            if len(self.tags) > 0:
+                return f"{self.__class__.__name__}(name={self.name}, tags={self.tags})"
+            return f"{self.__class__.__name__}(name={self.name})"
+        if len(self.tags) > 0:
+            return f"{self.__class__.__name__}(tags={self.tags})"
+        return f"{self.__class__.__name__}"
     __repr__ = __str__
 
 
@@ -1683,6 +1889,14 @@ class Container:
     def __str__(self):
         return f"Container ({len(_internal._cont_entities[id(self)])} entities)"
     __repr__ = __str__
+
+
+class frange:
+    def __init__(self, start, stop, step):
+        self.start, self.stop, self.step = start, stop, step
+        
+    def __iter__(self):
+        return _internal._FRangeIterator(self)
 
 
 def custom_image_loader(func):

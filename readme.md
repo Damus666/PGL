@@ -11,6 +11,7 @@ To use PGL you need to have installed the following modules:
 - pygame-ce
 - moderngl == 5.9.0
 - numpy
+- PyGLM
 - noise (optional)
 
 # [MD Documentation](docs/PGL.md)

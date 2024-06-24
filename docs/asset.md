@@ -25,11 +25,21 @@ Like you can see in the example, you can decorate (as many as you want) your fun
 Your function must return a dictionary `{image_name_string: surface}`<br><br>
 `custom_image_canvas(size: tuple[int, int] = (100, 100))` is just a shortcut to create a surface with an alpha channel ready for blitting.
 
+# Sounds
+
+The sounds you specify in the `congif.json/"sounds"` entry will be accessible using the `Sounds` and `Musics` static classes.<br>
+Both classes have the `volume` property. This value is a general value which is multiplied by each sound's volume to get the volume for each sound.<br>
+On both classes you can `play()` and `stop()` sounds and music but with the music you can also `pause()` and `resume()` the music.<br>
+`Musics.playing` contains the name of the currently playing music, or `None`.<br>
+You can use the `get_sound/music_volume()` and `set_sound/music_volume()` methods to get and set the volume of specific sounds and musics.<br>
+Finally you can add new sounds and musics during runtime with the `add()` method but you'll need to specify the path yourself.<br>
+The function `Sounds.get_sound_objects()` will return the list of `pygame` sounds asoociated to a name as you might want to use all the features. The list is a copy.
+
 # Scripts
 
 _Use `Vec` and `Rect` instead of `pygame.Vector2` and `pygame.FRect`_
 
-**ALL** the scripts in the project directory will be included in the output file.<br>
+**ALL** the scripts in the project directory will be included in the output file (unless they have 'ignore' at start of the filename).<br>
 All scripts should include the following line:
 
 ```py

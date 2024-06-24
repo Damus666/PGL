@@ -23,6 +23,15 @@ The game entry have general settings such as:
 - `"max-lights"`: the maximum numbers of active lights. Can't exceed `145`
 - `"ambient-light"`: a STRING with the default lighting when there is no light. Example: `"0.15, 0.15, 0.15, 1"` (default). NOTE: a notation different from this will result in shader compiler errors!
 
+## `"sounds"`
+
+Specify the sounds and the musics to be quickly used. 
+Each entry in the sounds dictionary should look like this: `"sound name & filename/folder": {sound settings}`
+where the filename has no extension. The settings can be:
+- `"volume"`: the volume of this sound specifically (default `1`) 
+- `"music"`: boolean falgging this as music (default `false`)
+- `"ext"`: the default extension is `"ogg"`, use this to change it. If you set it to `"folder"`, all the files in the folder will be loaded and playing will result in a random sound being played.
+
 ## `"fonts"`
 
 Specifies the fonts to be loaded. Can't be changed during runtime.
@@ -30,7 +39,7 @@ Should be a dictionary with `"font name": {font settings}`. Each settings can ha
 
 - `"path"`: string with file path or sysfont name or `null` (default font)
 - `"bitmap-size"`: the font size prnted on the texture, higher = more high res for big text. (default `100`)
-- `"base-scale"`: the font scaling to apply by default (defalt `1`)
+- `"base-scale"`: the font scaling to apply by default (default `1`)
 - `"antialias"`: enable antialiasing, not recommended for pixel art fonts (default `true`)
 - `"bold"`, `"italic"`, `"underline"`, `"strikethrough"`: style settings (default font). To have more styles for the same font another entry in the dictionary is needed.
 - `"chars"`: the characters to load. By default they are the printable ASCII characters but can be overrided for other languages without the latin alphabet.

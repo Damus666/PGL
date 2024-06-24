@@ -47,6 +47,7 @@ NOISE_PERLIN_3D = "perlin3D"
 
 
 class Entity:
+    name: str
     def __init_subclass__(
         cls,
         flags: tuple[str] = (),
@@ -68,6 +69,7 @@ class Entity:
         image: str = None,
         flip=(False, False),
         containers=(),
+        name: str = "entity",
     ) -> typing.Self: ...
     @staticmethod
     def with_tag(*tags) -> set[Entity]: ...
@@ -96,6 +98,8 @@ class Entity:
     def containers(self) -> list[Container]: ...
     @property
     def forward(self) -> Vec: ...
+    @property
+    def alive(self) -> bool: ...
     def __str__(self) -> str: ...
     def __repr__(self) -> str: ...
 
@@ -134,6 +138,7 @@ class Scene:
 
 
 class Time:
+    def __init__(self, *args, **kwargs) -> typing.Never: ...
     fps_limit: int
     delta: float
     time: float
@@ -183,6 +188,7 @@ class NoiseSettings:
 
 
 class Frame:
+    def __init__(self, *args, **kwargs) -> typing.Never: ...
     events: list[pygame.Event]
     screen_mouse: Vec
     mouse_rel: Vec
@@ -196,6 +202,7 @@ class Frame:
 
 
 class Window:
+    def __init__(self, *args, **kwargs) -> typing.Never: ...
     pixel_rect: Rect
     center: Vec
     size: Vec
@@ -208,6 +215,7 @@ class Window:
 
 
 class Camera:
+    def __init__(self, *args, **kwargs) -> typing.Never: ...
     position: Vec
     zoom: float
     rect: Rect
@@ -224,6 +232,7 @@ class Camera:
 
 
 class Binds:
+    def __init__(self, *args, **kwargs) -> typing.Never: ...
     @staticmethod
     def check_frame(name: str) -> bool: ...
     @staticmethod
@@ -236,6 +245,37 @@ class Binds:
     def modify(name: str, main: list[str], *alts: list[str]): ...
     @staticmethod
     def add(name: str, main: list[str], *alts: list[str]): ...
+    
+    
+class Sounds:
+    volume: float
+    @staticmethod
+    def play(name: str, loops: int = 0, fade_ms: int = 0, stop: bool = False): ...
+    @staticmethod
+    def stop(name: str): ...
+    @staticmethod
+    def set_sound_volume(name: str, volume: float): ...
+    @staticmethod
+    def get_sound_volume(name: str) -> float: ...
+    @staticmethod
+    def get_sound_objects(name: str) -> list[pygame.mixer.Sound]: ...
+    
+    
+class Musics:
+    volume: float
+    playing: str|None
+    @staticmethod
+    def play(name: str, loops: int = -1, start: int = 0, fade_ms: int = 0): ...
+    @staticmethod
+    def pause(): ...
+    @staticmethod
+    def resume(): ...
+    @staticmethod
+    def stop(): ...
+    @staticmethod
+    def set_music_volume(name: str, volume: float): ...
+    @staticmethod
+    def get_music_volume(name: str) -> float: ...
 
 
 class Light:
@@ -262,6 +302,7 @@ class Light:
 
 
 class Font:
+    def __init__(self, *args, **kwargs) -> typing.Never: ...
     @staticmethod
     def render_lines(
         font_name: str,
@@ -302,6 +343,12 @@ class Font:
 
     @staticmethod
     def clear(layer=0, shader=UI_SHADER): ...
+    
+    
+class frange:
+    def __init__(self, start: float, stop: float, step: float): ...
+    def __iter__(self) -> typing.Self: ...
+    def __next__(self) -> float: ...
 
 
 def from_pg_color(

@@ -4,7 +4,7 @@
 
 ## [config.json](config.md)
 
-## [Scripts and Images](asset.md)
+## [Images, Sounds, Scripts](asset.md)
 
 ## [Window, Time, Camera, Binds, Frame](windowing.md)
 
