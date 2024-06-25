@@ -12,6 +12,14 @@ The activation is needed for the check, and you can check for <= or >= with the 
 The `get()` method returns the noise value while the `check()` method applies the activation and returns a boolean.<br>
 Both functions expect a float for 1D, a sequence of 2 floats for 2D and a sequence of 3 floats for 3D.
 
+# Animation
+
+An helper class to update values over time with different easings. Animations are updated automatically. you can start and stop them with the methods. When an animation ends a custom function can be called (use `functools.partial` to use parameters with it).
+
+The value type can be `ANIMTYPE_NUMBER` to animate a number (`0.5`->`2.3`), `ANIMTYPE_COLOR` to animate a `pygame.Color` (green->blue) (note that you'll need to convert it back with `from_pg_color`), `ANIMTYPE_SEQUENCE` to animate all values of a sequence, useful for size or position (`(0.4, 0.8)`->`(0.2, 1.4)`).
+
+Easings should be an object of type _Ease, so all classes that start with Ease like `EaseLinear` or `EaseIn`. Don't forget to instantiate the class.
+
 ## frange(start: float, stop: float, step: float)
 Works exactly like the built-in range function but all the arguments can and should be floating point numbers.
 

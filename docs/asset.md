@@ -33,7 +33,7 @@ On both classes you can `play()` and `stop()` sounds and music but with the musi
 `Musics.playing` contains the name of the currently playing music, or `None`.<br>
 You can use the `get_sound/music_volume()` and `set_sound/music_volume()` methods to get and set the volume of specific sounds and musics.<br>
 Finally you can add new sounds and musics during runtime with the `add()` method but you'll need to specify the path yourself.<br>
-The function `Sounds.get_sound_objects()` will return the list of `pygame` sounds asoociated to a name as you might want to use all the features. The list is a copy.
+The function `Sounds.get_sound_objects()` will return the list of `pygame.Sound` sounds asoociated to a name as you might want to use all the features (the list is a copy) and you can retrieve the path of a music with `Musics.get_music_path()` and use all the features with the `pygame.mixer.music` module.
 
 # Scripts
 

@@ -10,6 +10,10 @@ The window static class contains properties to manage the window.
 
 - size: `Vec`: Get or set the size of the window in pixels. The string "maximized" is allowed.
 
+- position: `Vec`: Get or set the position of the window in pixels. The string "centered" is allowed.
+
+- opacity: `float`
+
 - title: `str`
 
 - resizable, borderless: `bool`

@@ -21,7 +21,7 @@ The game entry have general settings such as:
 - `"start-scene"`: the first scene to be loaded (REQUIRED)
 - `"framerate-limit"`: the maximum framerate, expects a number or the string `"unlimited"` (default)
 - `"max-lights"`: the maximum numbers of active lights. Can't exceed `145`
-- `"ambient-light"`: a STRING with the default lighting when there is no light. Example: `"0.15, 0.15, 0.15, 1"` (default). NOTE: a notation different from this will result in shader compiler errors!
+- `"ambient-light"`: a list with the default lighting when there is no light. Example: `[0.15, 0.15, 0.15, 1]` (default).
 
 ## `"sounds"`
 

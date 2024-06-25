@@ -11,6 +11,7 @@ import random
 import math
 import typing as typing
 # todo: particles, collision
+# todo: finish animation, button logic
 
 
 class PGLError(RuntimeError): ...
@@ -21,6 +22,7 @@ Vec = pygame.Vector2
 STATIC = "static"
 UPDATE = "update"
 INVISIBLE = "invisible"
+INVISIBLE_COLOR = (0, 0, 0, 0)
 KEYBOARD = "key"
 MOUSE = "mouse"
 PRESS = "press"
@@ -49,6 +51,9 @@ NOISE_SIMPLEX_3D = "simplex3D"
 NOISE_PERLIN_1D = "perlin1D"
 NOISE_PERLIN_2D = "perlin2D"
 NOISE_PERLIN_3D = "perlin3D"
+ANIMTYPE_NUMBER = "number"
+ANIMTYPE_COLOR = "color"
+ANIMTYPE_SEQUENCE = "sequence"
 
 
 class _internal:
@@ -57,10 +62,9 @@ class _internal:
     _scenes = {}
     _scene = None
     _clock = pygame.Clock()
+    _win = None
     _gl_context = None
     _shaders = {}
-    _resizable = True
-    _borderless = False
     _proj_mat4 = None
     _view_mat4 = None
     _unit = 1
@@ -98,6 +102,7 @@ class _internal:
         "width": 0,
         "uvs": {},
     }
+    _animations = []
     _SHADER_SOURCE = {
         "replace": {
             "vert": """
@@ -287,22 +292,21 @@ void main() {
         pygame.init()
 
         size = pygame.display.get_desktop_sizes()[0]
-        extra = 0
+        resizable = True
+        borderless = False
         if "window" in config:
             if "resizable" in config["window"]:
                 if config["window"]["resizable"]:
-                    extra |= pygame.RESIZABLE
-            else:
-                extra |= pygame.RESIZABLE
+                    resizable = config["window"]["resizable"]
             if "borderless" in config["window"] and config["window"]["borderless"]:
-                extra |= pygame.NOFRAME
+                borderless = True
             if "size" in config["window"] and config["window"]["size"] != "maximized":
                 size = config["window"]["size"]
-        pygame.display.set_mode(size, pygame.OPENGL | pygame.DOUBLEBUF | extra)
+        _internal._win = pygame.Window(
+            "PGL Window", size, opengl=True, resizable=resizable, borderless=borderless
+        )
         if "window" in config and "title" in config["window"]:
-            pygame.display.set_caption(config["window"]["title"])
-        else:
-            pygame.display.set_caption("PGL Window")
+            _internal._win.title = config["window"]["title"]
 
         _internal._gl_context = _mgl.create_context()
         _internal._gl_context.enable(_mgl.BLEND)
@@ -355,7 +359,7 @@ void main() {
                 "{MAX_LIGHTS}", f"{_internal._max_lights}"
             )
             fragment_data = fragment_data.replace(
-                "{AMBIENT_LIGHT}", _internal._ambient_light
+                "{AMBIENT_LIGHT}", ", ".join(list(map(str, _internal._ambient_light)))
             )
             _internal._shaders[name] = _internal._gl_context.program(
                 vertex_shader=data["vert"], fragment_shader=fragment_data
@@ -597,12 +601,15 @@ void main() {
                     if can_restart:
                         timer.start()
 
+            for anim in _internal._animations:
+                anim.update_value()
+
             _internal._scene.update()
             for e in _internal._update_entities:
                 e.update()
             _internal._LayerGroup._sorted_update_render()
 
-            pygame.display.flip()
+            _internal._win.flip()
             if Time.scale < 0:
                 raise PGLError("Time scale must be positive")
             Time.delta = (
@@ -618,6 +625,8 @@ void main() {
         Frame.buttons = pygame.mouse.get_pressed()
         Frame.keys_just_pressed = pygame.key.get_just_pressed()
         Frame.keys_just_released = pygame.key.get_just_released()
+        Frame.buttons_just_pressed = pygame.mouse.get_just_pressed()
+        Frame.buttons_just_released = pygame.mouse.get_just_released()
         Frame.absolute_time = pygame.time.get_ticks() / 1000
         Frame.mouse_wheel = Vec()
 
@@ -748,27 +757,48 @@ void main() {
 
     class _WindowType(type):
         @property
+        def window(self):
+            return _internal._win
+
+        @property
         def title(self):
-            return pygame.display.get_caption()[0]
+            return _internal._win.title
 
         @title.setter
         def title(self, v):
-            pygame.display.set_caption(v)
+            _internal._win.title = v
 
         @property
         def size(self):
-            return Vec(pygame.display.get_window_size())
+            return Vec(_internal._win.size)
 
         @size.setter
         def size(self, v):
-            extra = 0
-            if _internal._resizable:
-                extra |= pygame.RESIZABLE
-            if _internal._borderless:
-                extra |= pygame.NOFRAME
             if v == "maximized":
                 v = pygame.display.get_desktop_sizes()[0]
-            pygame.display.set_mode(v, pygame.OPENGL | pygame.DOUBLEBUF | extra)
+            _internal._win.size = v
+
+        @property
+        def position(self):
+            return Vec(_internal._win.position)
+
+        @position.setter
+        def position(self, v):
+            if v == "centered":
+                mw, mh = pygame.display.get_desktop_sizes()[0]
+                v = (
+                    int(mw / 2) - _internal._win.size[0],
+                    int(mh / 2) - _internal._win.size[1],
+                )
+            _internal._win.position = v
+
+        @property
+        def opacity(self):
+            return _internal._win.opacity
+
+        @opacity.setter
+        def opactity(self, v):
+            _internal._win.opacity = v
 
         @property
         def pixel_rect(self):
@@ -781,35 +811,19 @@ void main() {
 
         @property
         def resizable(self):
-            return _internal._resizable
+            return _internal._win.resizable
 
         @resizable.setter
         def resizable(self, v):
-            _internal._resizable = v
-            extra = 0
-            if _internal._resizable:
-                extra |= pygame.RESIZABLE
-            if _internal._borderless:
-                extra |= pygame.NOFRAME
-            pygame.display.set_mode(
-                Window.size, pygame.OPENGL | pygame.DOUBLEBUF | extra
-            )
+            _internal._win.resizable = v
 
         @property
         def borderless(self):
-            return _internal._borderless
+            return _internal._win.borderless
 
         @borderless.setter
         def borderless(self, v):
-            _internal._borderless = v
-            extra = 0
-            if _internal._resizable:
-                extra |= pygame.RESIZABLE
-            if _internal._borderless:
-                extra |= pygame.NOFRAME
-            pygame.display.set_mode(
-                Window.size, pygame.OPENGL | pygame.DOUBLEBUF | extra
-            )
+            _internal._win.borderless = v
 
     class _TimeType(type):
         @property
@@ -844,21 +858,20 @@ void main() {
             return False
 
         def _check_event(self):
-            for e in Frame.events:
-                if self.type == KEYBOARD:
-                    if self.direction == PRESS and e.type == pygame.KEYDOWN:
-                        if e.key == self.code:
-                            return True
-                    elif self.direction == RELEASE and e.type == pygame.KEYUP:
-                        if e.key == self.code:
-                            return True
-                elif self.type == MOUSE:
-                    if self.direction == PRESS and e.type == pygame.MOUSEBUTTONDOWN:
-                        if e.button == self.code:
-                            return True
-                    elif self.direction == RELEASE and e.type == pygame.MOUSEBUTTONUP:
-                        if e.button == self.code:
-                            return True
+            if self.type == KEYBOARD:
+                pressed = Frame.keys_just_pressed[self.code]
+                released = Frame.keys_just_released[self.code]
+                if self.direction == PRESS and pressed:
+                    return True
+                elif self.direction == RELEASE and released:
+                    return True
+            elif self.type == MOUSE:
+                pressed = Frame.buttons_just_pressed[self.code - 1]
+                released = Frame.buttons_just_released[self.code - 1]
+                if self.direction == PRESS and pressed:
+                    return True
+                elif self.direction == RELEASE and released:
+                    return True
             return False
 
     class _Bind:
@@ -1286,6 +1299,16 @@ void main() {
         def playing(self):
             return _internal._music_playing
 
+    class _Ease:
+        def get(self, t):
+            return self.__call__(t)
+
+    class _EaseN(_Ease):
+        def __init__(self, n=2):
+            if n < 1:
+                raise PGLError("n argument must be >= 1")
+            self.n = n
+
 
 class Sounds(metaclass=_internal._SoundsType):
     def play(name, loops=0, fade_ms=0, stop=False):
@@ -1356,18 +1379,18 @@ class Musics(metaclass=_internal._MusicsType):
     def add(name, path, volume=1):
         _internal._musics[name] = {"volume": volume, "path": path}
 
+    def get_music_path(name):
+        if name not in _internal._musics:
+            raise PGLError(f"Music '{name}' does not exist")
+        return _internal._musics[name]["path"]
+
 
 class Font(_internal._StaticType):
     def clear(layer=0, shader=UI_SHADER):
-        if layer not in _internal._font_groups:
-            _internal._font_groups[layer] = {
-                name: {"group": None} for name in _internal._SHADER_SOURCE.keys()
-            }
-        if _internal._font_groups[layer][shader]["group"] is None:
-            _internal._FontGroup(shader, layer)
-        group = _internal._font_groups[layer][shader]["group"]
-        group._data = []
-        group._dirty = True
+        _internal._LayerGroup._exist_create(layer)
+        font_group = _internal._FontGroup._exist_create(layer, shader)
+        font_group._data = []
+        font_group._dirty = True
 
     def render_center(
         font_name, text, position, color=None, scale=1, layer=0, shader=UI_SHADER
@@ -1544,6 +1567,162 @@ class Light:
     __repr__ = __str__
 
 
+class EaseLinear(_internal._Ease):
+    def __call__(self, t):
+        return t
+
+
+class EaseIn(_internal._EaseN):
+    def __call__(self, t):
+        return t**self.n
+
+
+class EaseOut(_internal._EaseN):
+    def __call__(self, t):
+        return 1 - (1 - t) ** self.n
+
+
+class EaseInCirc(_internal._EaseN):
+    def __call__(self, t):
+        return 1 - math.sqrt(1 - t**self.n)
+
+
+class EaseOutCirc(_internal._EaseN):
+    def __call__(self, t):
+        return math.sqrt(1 - (1 - t) ** self.n)
+
+
+class EaseInSin(_internal._EaseN):
+    def __call__(self, t):
+        return 1 - math.cos(t * 0.5 * math.pi) ** (1 / self.n)
+
+
+class EaseOutSin(_internal._EaseN):
+    def __call__(self, t):
+        return math.sin(t * 0.5 * math.pi) ** (1 / self.n)
+
+
+class EaseInOutSin(_internal._Ease):
+    def __call__(self, t):
+        return -math.cos(t * math.pi) / 2 + 0.5
+
+
+class EaseOvershoot(_internal._Ease):
+    def __call__(self, t):
+        return 1 - math.cos(4 * math.pi * t) * (1 - t)
+
+
+class EaseBounce(_internal._Ease):
+    def __call__(self, t):
+        if 2 * t - 2 == 0:
+            return (1 - t) * abs(math.sin(0))
+        return (1 - t) * abs(math.sin(math.pi / (2 * t - 2)))
+
+
+class Animation:
+    def __init__(self, value_type=ANIMTYPE_NUMBER, easing=None):
+        if easing is None:
+            easing = EaseLinear()
+        self.value_type = value_type
+        self.easing = easing
+        self.active = False
+        self.value = None
+        _internal._animations.append(self)
+        self.start(None, None, 0).stop()
+
+    def start(self, start_value, end_value, duration, on_end=None):
+        self.on_end = on_end
+        self.active = True
+        self.start_value, self.end_value = start_value, end_value
+        self.duration = duration
+        self.start_time = pygame.time.get_ticks()
+        if self.value_type == ANIMTYPE_COLOR:
+            self.start_value = pygame.Color(self.start_value)
+            self.end_value = pygame.Color(self.end_value)
+        return self
+
+    def stop(self):
+        self.active = False
+        self.value = self.end_value
+        return self
+
+    def update_value(self):
+        if not self.active:
+            self.value = self.end_value
+            return self.end_value
+
+        if not isinstance(self.easing, _internal._Ease):
+            raise PGLError(
+                f"Animation easing must be of type Ease, not '{type(self.easing)}'"
+            )
+
+        if self.value_type == ANIMTYPE_NUMBER:
+            self.value = pygame.math.lerp(
+                self.start_value,
+                self.end_value,
+                self.easing(self.get_time() / self.duration),
+            )
+            if abs(self.value - self.end_value) <= 0.001:
+                self.value = self.end_value
+                self.active = False
+                if self.on_end:
+                    self.on_end()
+
+        elif self.value_type == ANIMTYPE_COLOR:
+            self.value = self.start_value.lerp(
+                self.end_value,
+                pygame.math.clamp(
+                    self.easing(self.get_time() / self.duration), 0.0, 1.0
+                ),
+            )
+            if (
+                abs(self.end_value.r - self.value.r) <= 1
+                and abs(self.end_value.g - self.value.g) <= 1
+                and abs(self.end_value.b - self.value.b) <= 1
+                and abs(self.end_value.a - self.value.a) <= 1
+            ):
+                self.value = self.end_value
+                self.active = False
+                if self.on_end:
+                    self.on_end()
+
+        elif self.value_type == ANIMTYPE_SEQUENCE:
+            new_seq = []
+            finished = 0
+            if len(self.start_value) != len(self.end_value):
+                raise PGLError(
+                    "A sequence animation must have start_value and end_value of the same length"
+                )
+            ease = self.easing(self.get_time() / self.duration)
+            for i, val in enumerate(self.start_value):
+                endv = self.end_value[i]
+                new_val = pygame.math.lerp(val, endv, ease)
+                if abs(new_val - endv) <= 0.001:
+                    finished += 1
+                new_seq.append(new_val)
+            new_seq = type(self.start_value)(new_seq)
+            self.value = new_seq
+            if finished >= len(self.start_value):
+                self.active = False
+                self.value = self.end_value
+                if self.on_end:
+                    self.on_end()
+        else:
+            raise PGLError(
+                f"Unknown animation value type '{self.value_type}', available number, sequence and color"
+            )
+        return self.value
+
+    def destroy(self):
+        if self in _internal._animations:
+            _internal._animations.remove(self)
+
+    def get_time(self):
+        if not self.active:
+            return -1
+        return (pygame.time.get_ticks() - self.start_time) / 1000
+
+
 class Binds(_internal._StaticType):
     def check_frame(name):
         if name not in _internal._binds:
@@ -1622,6 +1801,8 @@ class Frame(_internal._StaticType):
     buttons = None
     keys_just_pressed = None
     keys_just_released = None
+    buttons_just_pressed = None
+    buttons_just_released = None
     absolute_time = None
 
 

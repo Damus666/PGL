@@ -158,7 +158,7 @@ def create_project(project_name, do_print=True):
             "from prelude import *\nimport typing\nif typing.TYPE_CHECKING:\n\t# import your files\n\t...\n\n\nclass Main(Scene):\n\tdef init(self):\n\t\t...\n\n\tdef update(self):\n\t\t...\n"
         )
     with open(project_path + "ruff.toml", "w") as toml_file:
-        toml_file.write('ignore = ["F403", "F405"]')
+        toml_file.write('lint.ignore = ["F403", "F405"]')
     with open(project_path + "config.json", "w") as config_file:
         config_file.write("""
 {
